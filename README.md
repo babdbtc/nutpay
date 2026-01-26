@@ -264,6 +264,14 @@ Users can add custom mints in the extension settings.
 - **Proof selection** - Optimizes for minimal change using subset-sum algorithm
 - **Auto-cleanup** - Expired pending payments cleaned automatically
 
+## Credits
+
+This extension implements the [X-Cashu](https://github.com/cashubtc/xcashu) protocol created by [Cashu](https://github.com/cashubtc). X-Cashu enables HTTP 402 Payment Required flows using Cashu ecash tokens.
+
+Built with [cashu-ts](https://github.com/cashubtc/cashu-ts), the TypeScript implementation of the Cashu protocol.
+
+Learn more about Cashu at [cashu.space](https://cashu.space).
+
 ## License
 
 MIT
