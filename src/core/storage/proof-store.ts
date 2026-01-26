@@ -1,6 +1,7 @@
 import type { Proof } from '@cashu/cashu-ts';
 import type { StoredProof } from '../../shared/types';
 import { STORAGE_KEYS } from '../../shared/constants';
+import { normalizeMintUrl } from '../../shared/format';
 
 // Simple encryption using Web Crypto API
 async function getEncryptionKey(): Promise<CryptoKey> {
@@ -89,7 +90,8 @@ export async function getProofs(): Promise<StoredProof[]> {
 // Get proofs for a specific mint
 export async function getProofsForMint(mintUrl: string): Promise<StoredProof[]> {
   const proofs = await getProofs();
-  return proofs.filter((p) => p.mintUrl === mintUrl);
+  const normalizedUrl = normalizeMintUrl(mintUrl);
+  return proofs.filter((p) => normalizeMintUrl(p.mintUrl) === normalizedUrl);
 }
 
 // Add new proofs
@@ -99,10 +101,11 @@ export async function addProofs(
 ): Promise<void> {
   const existing = await getProofs();
   const now = Date.now();
+  const normalizedUrl = normalizeMintUrl(mintUrl);
 
   const newProofs: StoredProof[] = proofs.map((proof) => ({
     proof,
-    mintUrl,
+    mintUrl: normalizedUrl,
     amount: proof.amount,
     dateReceived: now,
   }));
@@ -130,8 +133,9 @@ export async function getBalanceByMint(): Promise<Map<string, number>> {
   const balances = new Map<string, number>();
 
   for (const sp of proofs) {
-    const current = balances.get(sp.mintUrl) || 0;
-    balances.set(sp.mintUrl, current + sp.amount);
+    const normalizedUrl = normalizeMintUrl(sp.mintUrl);
+    const current = balances.get(normalizedUrl) || 0;
+    balances.set(normalizedUrl, current + sp.amount);
   }
 
   return balances;
@@ -148,6 +152,7 @@ export async function selectProofsForPayment(
   mintUrl: string,
   amount: number
 ): Promise<{ proofs: Proof[]; total: number } | null> {
+  // getProofsForMint already normalizes the URL
   const available = await getProofsForMint(mintUrl);
 
   // Sort by amount descending for greedy selection

@@ -1,5 +1,6 @@
 import type { Settings, MintConfig } from '../../shared/types';
 import { STORAGE_KEYS, DEFAULT_SETTINGS, PRESET_MINTS } from '../../shared/constants';
+import { normalizeMintUrl } from '../../shared/format';
 
 // Get current settings
 export async function getSettings(): Promise<Settings> {
@@ -41,13 +42,16 @@ export async function getMints(): Promise<MintConfig[]> {
 // Add a new mint
 export async function addMint(mint: MintConfig): Promise<MintConfig[]> {
   const mints = await getMints();
+  const normalizedUrl = normalizeMintUrl(mint.url);
 
-  // Check if already exists
-  if (mints.some((m) => m.url === mint.url)) {
+  // Check if already exists (normalize both for comparison)
+  if (mints.some((m) => normalizeMintUrl(m.url) === normalizedUrl)) {
     return mints;
   }
 
-  const updated = [...mints, mint];
+  // Store with normalized URL
+  const newMint = { ...mint, url: normalizedUrl };
+  const updated = [...mints, newMint];
   await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
   return updated;
 }
@@ -58,8 +62,9 @@ export async function updateMint(
   updates: Partial<MintConfig>
 ): Promise<MintConfig[]> {
   const mints = await getMints();
+  const normalizedUrl = normalizeMintUrl(url);
   const updated = mints.map((m) =>
-    m.url === url ? { ...m, ...updates } : m
+    normalizeMintUrl(m.url) === normalizedUrl ? { ...m, ...updates } : m
   );
 
   await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
@@ -69,7 +74,8 @@ export async function updateMint(
 // Remove a mint
 export async function removeMint(url: string): Promise<MintConfig[]> {
   const mints = await getMints();
-  const updated = mints.filter((m) => m.url !== url);
+  const normalizedUrl = normalizeMintUrl(url);
+  const updated = mints.filter((m) => normalizeMintUrl(m.url) !== normalizedUrl);
 
   await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
   return updated;
@@ -84,6 +90,7 @@ export async function getEnabledMints(): Promise<MintConfig[]> {
 // Check if a mint is trusted
 export async function isMintTrusted(url: string): Promise<boolean> {
   const mints = await getMints();
-  const mint = mints.find((m) => m.url === url);
+  const normalizedUrl = normalizeMintUrl(url);
+  const mint = mints.find((m) => normalizeMintUrl(m.url) === normalizedUrl);
   return mint?.trusted ?? false;
 }

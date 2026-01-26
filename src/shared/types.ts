@@ -17,14 +17,32 @@ export type MessageType =
   | 'APPROVAL_RESPONSE'
   | 'GET_BALANCE'
   | 'GET_TRANSACTIONS'
+  | 'GET_FILTERED_TRANSACTIONS'
   | 'ADD_PROOFS'
   | 'GET_SETTINGS'
   | 'UPDATE_SETTINGS'
   | 'GET_MINTS'
+  | 'ADD_MINT'
+  | 'UPDATE_MINT'
+  | 'REMOVE_MINT'
   | 'GET_ALLOWLIST'
   | 'ADD_TO_ALLOWLIST'
   | 'REMOVE_FROM_ALLOWLIST'
-  | 'SETTINGS_UPDATED';
+  | 'UPDATE_ALLOWLIST_ENTRY'
+  | 'SETTINGS_UPDATED'
+  // Lightning receive
+  | 'CREATE_MINT_QUOTE'
+  | 'CHECK_MINT_QUOTE'
+  | 'MINT_PROOFS'
+  | 'GET_PENDING_QUOTES'
+  // Send
+  | 'GENERATE_SEND_TOKEN'
+  | 'GET_MELT_QUOTE'
+  | 'MELT_PROOFS'
+  | 'GET_PENDING_TOKENS'
+  // Mint info
+  | 'GET_MINT_INFO'
+  | 'GET_MINT_BALANCE_DETAILS';
 
 // Base message structure
 export interface BaseMessage {
@@ -150,6 +168,38 @@ export interface PendingPayment {
     body: string | null;
   };
   timestamp: number;
+}
+
+// Pending Lightning mint quote (for receiving via Lightning)
+export interface PendingMintQuote {
+  id: string;
+  quoteId: string;
+  mintUrl: string;
+  amount: number;
+  invoice: string;
+  createdAt: number;
+  expiresAt: number;
+  status: 'pending' | 'paid' | 'minted';
+}
+
+// Pending token for send/recovery
+export interface PendingToken {
+  id: string;
+  token: string;
+  amount: number;
+  mintUrl: string;
+  createdAt: number;
+  purpose: 'manual_send' | 'lightning_melt';
+  destination?: string;
+  status: 'pending' | 'claimed' | 'expired';
+}
+
+// Melt quote for sending Lightning
+export interface MeltQuoteInfo {
+  quote: string;
+  amount: number;
+  fee: number;
+  expiry: number;
 }
 
 // Union type for all messages

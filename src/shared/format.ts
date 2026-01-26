@@ -1,6 +1,25 @@
 import type { Settings } from './types';
 
 /**
+ * Normalize a mint URL for consistent comparison and storage
+ * Removes trailing slashes and ensures lowercase
+ */
+export function normalizeMintUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // Remove trailing slash from pathname
+    let normalized = parsed.origin + parsed.pathname.replace(/\/+$/, '');
+    // Keep query string and hash if present (unlikely for mints but just in case)
+    if (parsed.search) normalized += parsed.search;
+    if (parsed.hash) normalized += parsed.hash;
+    return normalized;
+  } catch {
+    // If URL parsing fails, just remove trailing slashes
+    return url.replace(/\/+$/, '');
+  }
+}
+
+/**
  * Format an amount based on user's display preference
  * @param amount - The amount in sats
  * @param format - 'symbol' for ₿10, 'text' for 10 sats
