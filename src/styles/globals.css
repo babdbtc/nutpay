@@ -239,7 +239,8 @@
 /* Popup dimensions */
 .popup-container {
   width: 360px;
-  min-height: 480px;
+  min-height: 520px;
+  max-height: 580px;
 }
 
 /* Options page */
