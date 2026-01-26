@@ -52,7 +52,13 @@ export type MessageType =
   | 'CHANGE_CREDENTIAL'
   | 'RECOVER_WITH_PHRASE'
   | 'DISABLE_SECURITY'
-  | 'GET_RECOVERY_PHRASE';
+  | 'GET_RECOVERY_PHRASE'
+  // NUT-13 Seed Recovery
+  | 'START_SEED_RECOVERY'
+  | 'GET_RECOVERY_PROGRESS'
+  | 'CANCEL_RECOVERY'
+  | 'GET_WALLET_INFO'
+  | 'SETUP_WALLET_SEED';
 
 // Base message structure
 export interface BaseMessage {
@@ -232,6 +238,37 @@ export interface SessionState {
   expiresAt: number;         // Timestamp when session expires
   failedAttempts: number;    // Failed auth attempts
   lockedUntil: number | null; // Timestamp when lockout ends
+}
+
+// NUT-13 Recovery Progress
+export interface RecoveryProgress {
+  mintUrl: string;
+  status: 'scanning' | 'found' | 'complete' | 'error';
+  proofsFound: number;
+  totalAmount: number;
+  currentCounter: number;
+  errorMessage?: string;
+}
+
+// NUT-13 Recovery Result
+export interface RecoveryResult {
+  success: boolean;
+  totalRecovered: number;
+  mintResults: Array<{
+    mintUrl: string;
+    amount: number;
+    proofCount: number;
+  }>;
+  errors: string[];
+}
+
+// Recovery State (for tracking in-progress recovery)
+export interface RecoveryState {
+  inProgress: boolean;
+  startedAt?: number;
+  mintUrls: string[];
+  progress: RecoveryProgress[];
+  result?: RecoveryResult;
 }
 
 // Union type for all messages

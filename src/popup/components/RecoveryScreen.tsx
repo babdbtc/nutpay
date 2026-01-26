@@ -1,21 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertCircle, Eye, EyeOff, KeyRound, Loader2, Check, X, Wallet } from 'lucide-react';
+import type { RecoveryProgress, MintConfig } from '../../shared/types';
 
 interface RecoveryScreenProps {
   onRecovered: () => void;
   onBack: () => void;
 }
 
-type Step = 'phrase' | 'newCredential';
+type Step = 'phrase' | 'selectMints' | 'recovering' | 'results' | 'newCredential';
+type RecoveryMode = 'pin_reset' | 'wallet_restore';
 
 export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
   const [step, setStep] = useState<Step>('phrase');
+  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>('pin_reset');
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [authType, setAuthType] = useState<'pin' | 'password'>('pin');
   const [credential, setCredential] = useState('');
@@ -24,9 +28,88 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Mint selection state
+  const [availableMints, setAvailableMints] = useState<MintConfig[]>([]);
+  const [selectedMints, setSelectedMints] = useState<Set<string>>(new Set());
+  const [customMintUrl, setCustomMintUrl] = useState('');
+
+  // Recovery progress state
+  const [recoveryProgress, setRecoveryProgress] = useState<RecoveryProgress[]>([]);
+  const [recoveryResult, setRecoveryResult] = useState<{
+    totalRecovered: number;
+    mintResults: Array<{ mintUrl: string; amount: number; proofCount: number }>;
+  } | null>(null);
+
+  // Default popular mints for recovery (when user has no saved mints)
+  const defaultMints: MintConfig[] = [
+    { url: 'https://mint.minibits.cash/Bitcoin', name: 'Minibits', enabled: true, trusted: true },
+    { url: 'https://mint.coinos.io', name: 'Coinos', enabled: true, trusted: true },
+    { url: 'https://mint.lnvoltz.com', name: 'LNVoltz', enabled: true, trusted: true },
+  ];
+
+  // Load available mints
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'GET_MINTS' }).then((mints) => {
+      const savedMints = mints || [];
+      // If no saved mints, use default mints for recovery
+      const mintsToUse = savedMints.length > 0 ? savedMints : defaultMints;
+      setAvailableMints(mintsToUse);
+      // Select all enabled mints by default
+      const enabled = new Set<string>(
+        mintsToUse.filter((m: MintConfig) => m.enabled).map((m: MintConfig) => m.url)
+      );
+      setSelectedMints(enabled);
+    });
+  }, []);
+
+  // Poll for recovery progress
+  useEffect(() => {
+    if (step !== 'recovering') return;
+
+    const interval = setInterval(async () => {
+      const status = await chrome.runtime.sendMessage({ type: 'GET_RECOVERY_PROGRESS' });
+
+      if (status.progress) {
+        setRecoveryProgress(status.progress);
+      }
+
+      // Check if all complete
+      if (!status.inProgress && status.progress?.length > 0) {
+        const allComplete = status.progress.every(
+          (p: RecoveryProgress) => p.status === 'complete' || p.status === 'error'
+        );
+        if (allComplete) {
+          const totalRecovered = status.progress.reduce(
+            (sum: number, p: RecoveryProgress) => sum + p.totalAmount,
+            0
+          );
+          const mintResults = status.progress
+            .filter((p: RecoveryProgress) => p.totalAmount > 0)
+            .map((p: RecoveryProgress) => ({
+              mintUrl: p.mintUrl,
+              amount: p.totalAmount,
+              proofCount: p.proofsFound,
+            }));
+
+          setRecoveryResult({ totalRecovered, mintResults });
+          setStep('results');
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [step]);
+
   const handleVerifyPhrase = async () => {
     if (!recoveryPhrase.trim()) {
       setError('Please enter your recovery phrase');
+      return;
+    }
+
+    // Validate it's 12 words
+    const words = recoveryPhrase.trim().toLowerCase().split(/\s+/);
+    if (words.length !== 12) {
+      setError('Recovery phrase must be exactly 12 words');
       return;
     }
 
@@ -37,11 +120,15 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
       const result = await chrome.runtime.sendMessage({
         type: 'RECOVER_WITH_PHRASE',
         phrase: recoveryPhrase.trim(),
-        verify: true, // Just verify, don't reset yet
+        verify: true,
       });
 
       if (result.valid) {
-        setStep('newCredential');
+        if (recoveryMode === 'pin_reset') {
+          setStep('newCredential');
+        } else {
+          setStep('selectMints');
+        }
       } else {
         setError('Invalid recovery phrase');
       }
@@ -52,10 +139,54 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
     }
   };
 
+  const handleAddCustomMint = () => {
+    if (!customMintUrl.trim()) return;
+
+    try {
+      new URL(customMintUrl); // Validate URL
+      setSelectedMints((prev) => new Set([...prev, customMintUrl.trim()]));
+      setCustomMintUrl('');
+    } catch {
+      setError('Invalid mint URL');
+    }
+  };
+
+  const handleStartRecovery = async () => {
+    if (selectedMints.size === 0) {
+      setError('Please select at least one mint');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'START_SEED_RECOVERY',
+        mnemonic: recoveryPhrase.trim(),
+        mintUrls: Array.from(selectedMints),
+      });
+
+      if (result.success) {
+        setStep('recovering');
+      } else {
+        setError(result.error || 'Failed to start recovery');
+      }
+    } catch {
+      setError('Failed to start recovery');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelRecovery = async () => {
+    await chrome.runtime.sendMessage({ type: 'CANCEL_RECOVERY' });
+    setStep('selectMints');
+  };
+
   const handleResetCredential = async () => {
     setError(null);
 
-    // Validate
     if (authType === 'pin') {
       if (!/^\d{4,6}$/.test(credential)) {
         setError('PIN must be 4-6 digits');
@@ -96,6 +227,11 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
     }
   };
 
+  const handleFinishRecovery = () => {
+    // Proceed to set new credential after wallet recovery
+    setStep('newCredential');
+  };
+
   // Step 1: Enter recovery phrase
   if (step === 'phrase') {
     return (
@@ -104,9 +240,41 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
           <div className="w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <KeyRound className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-lg font-semibold text-white">Recovery</h2>
+          <h2 className="text-lg font-semibold text-white">Wallet Recovery</h2>
           <p className="text-sm text-muted-foreground text-center">
-            Enter your 12-word recovery phrase to reset your PIN or password
+            Enter your 12-word seed phrase
+          </p>
+        </div>
+
+        {/* Recovery mode selection */}
+        <div className="space-y-2">
+          <Label>What would you like to recover?</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={recoveryMode === 'pin_reset' ? 'default' : 'outline'}
+              onClick={() => setRecoveryMode('pin_reset')}
+              className="h-auto py-3"
+            >
+              <div className="text-center">
+                <KeyRound className="h-4 w-4 mx-auto mb-1" />
+                <div className="text-xs">Reset PIN</div>
+              </div>
+            </Button>
+            <Button
+              variant={recoveryMode === 'wallet_restore' ? 'default' : 'outline'}
+              onClick={() => setRecoveryMode('wallet_restore')}
+              className="h-auto py-3"
+            >
+              <div className="text-center">
+                <Wallet className="h-4 w-4 mx-auto mb-1" />
+                <div className="text-xs">Restore Wallet</div>
+              </div>
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {recoveryMode === 'pin_reset'
+              ? 'Reset your PIN/password without scanning for funds'
+              : 'Scan mints to recover your ecash balance'}
           </p>
         </div>
 
@@ -138,7 +306,177 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
     );
   }
 
-  // Step 2: Set new credential
+  // Step 2: Select mints for recovery
+  if (step === 'selectMints') {
+    return (
+      <div className="popup-container bg-background p-6 flex flex-col gap-4">
+        <div className="text-center mb-2">
+          <h2 className="text-lg font-semibold text-white">Select Mints</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Choose which mints to scan for recoverable funds
+          </p>
+        </div>
+
+        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+          {availableMints.map((mint) => (
+            <label
+              key={mint.url}
+              className="flex items-center gap-3 p-3 rounded-lg bg-card cursor-pointer hover:bg-card/80"
+            >
+              <Checkbox
+                checked={selectedMints.has(mint.url)}
+                onCheckedChange={(checked) => {
+                  setSelectedMints((prev) => {
+                    const next = new Set(prev);
+                    if (checked) {
+                      next.add(mint.url);
+                    } else {
+                      next.delete(mint.url);
+                    }
+                    return next;
+                  });
+                }}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-white truncate">{mint.name}</div>
+                <div className="text-xs text-muted-foreground truncate">{mint.url}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {/* Custom mint input */}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Add custom mint URL..."
+            value={customMintUrl}
+            onChange={(e) => setCustomMintUrl(e.target.value)}
+            className="bg-card border-input"
+          />
+          <Button variant="secondary" onClick={handleAddCustomMint}>
+            Add
+          </Button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <Button onClick={handleStartRecovery} disabled={loading || selectedMints.size === 0}>
+          {loading ? 'Starting...' : `Scan ${selectedMints.size} Mint${selectedMints.size !== 1 ? 's' : ''}`}
+        </Button>
+
+        <Button variant="ghost" onClick={() => setStep('phrase')} className="text-muted-foreground">
+          Back
+        </Button>
+      </div>
+    );
+  }
+
+  // Step 3: Recovery in progress
+  if (step === 'recovering') {
+    return (
+      <div className="popup-container bg-background p-6 flex flex-col gap-4">
+        <div className="text-center mb-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+          <h2 className="text-lg font-semibold text-white">Recovering Wallet</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Scanning mints for your ecash...
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {recoveryProgress.map((progress) => (
+            <div key={progress.mintUrl} className="p-3 rounded-lg bg-card">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-white truncate max-w-[200px]">
+                  {progress.mintUrl.replace(/^https?:\/\//, '')}
+                </span>
+                {progress.status === 'scanning' && (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                )}
+                {progress.status === 'found' && (
+                  <span className="text-green-400 text-xs">Found!</span>
+                )}
+                {progress.status === 'complete' && (
+                  <Check className="h-4 w-4 text-green-400" />
+                )}
+                {progress.status === 'error' && (
+                  <X className="h-4 w-4 text-red-400" />
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {progress.status === 'scanning' && `Scanning counter ${progress.currentCounter}...`}
+                {progress.status === 'found' &&
+                  `Found ${progress.proofsFound} proofs (${progress.totalAmount} sats)`}
+                {progress.status === 'complete' &&
+                  (progress.totalAmount > 0
+                    ? `Recovered ${progress.totalAmount} sats`
+                    : 'No funds found')}
+                {progress.status === 'error' && progress.errorMessage}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button variant="secondary" onClick={handleCancelRecovery}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  // Step 4: Recovery results
+  if (step === 'results') {
+    return (
+      <div className="popup-container bg-background p-6 flex flex-col gap-4">
+        <div className="text-center mb-2">
+          <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-2">
+            <Check className="h-6 w-6 text-green-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-white">Recovery Complete</h2>
+          {recoveryResult && recoveryResult.totalRecovered > 0 ? (
+            <p className="text-2xl font-bold text-primary mt-2">
+              {recoveryResult.totalRecovered} sats
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground mt-2">
+              No funds found on selected mints
+            </p>
+          )}
+        </div>
+
+        {recoveryResult && recoveryResult.mintResults.length > 0 && (
+          <div className="space-y-2">
+            {recoveryResult.mintResults.map((result) => (
+              <div key={result.mintUrl} className="p-3 rounded-lg bg-card">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-white truncate max-w-[180px]">
+                    {result.mintUrl.replace(/^https?:\/\//, '')}
+                  </span>
+                  <span className="text-sm font-medium text-primary">
+                    {result.amount} sats
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {result.proofCount} proofs
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Button onClick={handleFinishRecovery}>
+          Set New {authType === 'pin' ? 'PIN' : 'Password'}
+        </Button>
+      </div>
+    );
+  }
+
+  // Step 5: Set new credential
   return (
     <div className="popup-container bg-background p-6 flex flex-col gap-4">
       <div className="text-center mb-2">
@@ -222,7 +560,7 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
       </Button>
 
       <Button variant="ghost" onClick={() => setStep('phrase')} className="text-muted-foreground">
-        Back
+        Start Over
       </Button>
     </div>
   );

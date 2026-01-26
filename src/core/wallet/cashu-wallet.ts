@@ -4,6 +4,7 @@ import { selectProofs, storeProofs, spendProofs, getBalanceByMint } from './proo
 import { addTransaction, updateTransactionStatus } from '../storage/transaction-store';
 import { addPendingMintQuote, updateMintQuoteStatus, getPendingMintQuoteByQuoteId } from '../storage/pending-quote-store';
 import { addPendingToken, updatePendingTokenStatus } from '../storage/pending-token-store';
+import { hasSeed } from '../storage/seed-store';
 import type { XCashuPaymentRequest, MintBalance, PendingMintQuote, MeltQuoteInfo, PendingToken } from '../../shared/types';
 import { getMints } from '../storage/settings-store';
 import { normalizeMintUrl } from '../../shared/format';
@@ -70,12 +71,26 @@ export async function createPaymentToken(
   });
 
   try {
-    // Create the send token
-    const { send: sendProofs, keep: changeProofs } = await wallet.send(
-      amount,
-      selection.proofs,
-      { includeFees: true }
-    );
+    // Create the send token using v3 ops API
+    const seedExists = await hasSeed();
+    let sendProofs: Proof[];
+    let changeProofs: Proof[];
+
+    if (seedExists) {
+      // Use deterministic secrets (NUT-13)
+      const result = await wallet.ops
+        .send(amount, selection.proofs)
+        .asDeterministic(0) // Auto-reserve counters
+        .includeFees(true)
+        .run();
+      sendProofs = result.send;
+      changeProofs = result.keep;
+    } else {
+      // Legacy: random secrets
+      const result = await wallet.send(amount, selection.proofs, { includeFees: true });
+      sendProofs = result.send;
+      changeProofs = result.keep;
+    }
 
     // Encode the token
     const token = getEncodedTokenV4({
@@ -125,8 +140,20 @@ export async function receiveToken(encodedToken: string): Promise<{
     // Get wallet for this mint
     const wallet = await getWalletForMint(mintUrl);
 
-    // Receive the proofs (this validates them with the mint)
-    const receivedProofs = await wallet.receive(encodedToken);
+    // Receive the proofs using v3 ops API
+    const seedExists = await hasSeed();
+    let receivedProofs: Proof[];
+
+    if (seedExists) {
+      // Use deterministic secrets (NUT-13)
+      receivedProofs = await wallet.ops
+        .receive(encodedToken)
+        .asDeterministic(0) // Auto-reserve counters
+        .run();
+    } else {
+      // Legacy: random secrets
+      receivedProofs = await wallet.receive(encodedToken);
+    }
 
     // Store the proofs (using normalized URL)
     await storeProofs(receivedProofs, mintUrl);
@@ -270,8 +297,23 @@ export async function mintProofsFromQuote(
     const normalizedUrl = normalizeMintUrl(mintUrl);
     const wallet = await getWalletForMint(normalizedUrl);
 
-    // Mint the proofs
-    const proofs = await wallet.mintProofs(amount, quoteId);
+    // Mint the proofs using v3 ops API
+    const seedExists = await hasSeed();
+    let proofs: Proof[];
+
+    // Get the mint quote first for the ops builder
+    const mintQuote = await wallet.checkMintQuote(quoteId);
+
+    if (seedExists) {
+      // Use deterministic secrets (NUT-13)
+      proofs = await wallet.ops
+        .mintBolt11(amount, mintQuote)
+        .asDeterministic(0) // Auto-reserve counters
+        .run();
+    } else {
+      // Legacy: random secrets
+      proofs = await wallet.mintProofs(amount, quoteId);
+    }
 
     // Store the proofs
     await storeProofs(proofs, normalizedUrl);
@@ -328,12 +370,26 @@ export async function generateSendToken(
       };
     }
 
-    // Create send proofs
-    const { send: sendProofs, keep: changeProofs } = await wallet.send(
-      amount,
-      selection.proofs,
-      { includeFees: true }
-    );
+    // Create send proofs using v3 ops API
+    const seedExists = await hasSeed();
+    let sendProofs: Proof[];
+    let changeProofs: Proof[];
+
+    if (seedExists) {
+      // Use deterministic secrets (NUT-13)
+      const result = await wallet.ops
+        .send(amount, selection.proofs)
+        .asDeterministic(0)
+        .includeFees(true)
+        .run();
+      sendProofs = result.send;
+      changeProofs = result.keep;
+    } else {
+      // Legacy: random secrets
+      const result = await wallet.send(amount, selection.proofs, { includeFees: true });
+      sendProofs = result.send;
+      changeProofs = result.keep;
+    }
 
     // Encode the token
     const token = getEncodedTokenV4({

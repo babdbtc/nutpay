@@ -1,17 +1,17 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { AlertCircle, Check, Copy, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Check, Copy, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 
 interface SecuritySetupProps {
   onComplete: () => void;
   onSkip: () => void;
 }
 
-type Step = 'choose' | 'create' | 'recovery' | 'confirm';
+type Step = 'choose' | 'create' | 'recovery' | 'verify' | 'confirm';
 
 export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
   const [step, setStep] = useState<Step>('choose');
@@ -24,6 +24,22 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
   const [acknowledgedPhrase, setAcknowledgedPhrase] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Verification step state
+  const [verificationWords, setVerificationWords] = useState<number[]>([]);
+  const [verificationInputs, setVerificationInputs] = useState<{ [key: number]: string }>({});
+
+  // Generate 3 random word indices for verification
+  const generateVerificationIndices = (phraseLength: number): number[] => {
+    const indices: number[] = [];
+    while (indices.length < 3) {
+      const idx = Math.floor(Math.random() * phraseLength);
+      if (!indices.includes(idx)) {
+        indices.push(idx);
+      }
+    }
+    return indices.sort((a, b) => a - b);
+  };
 
   const handleCreateCredential = async () => {
     setError(null);
@@ -75,13 +91,39 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
     setTimeout(() => setCopiedPhrase(false), 2000);
   };
 
-  const handleFinish = () => {
+  const handleProceedToVerify = () => {
     if (!acknowledgedPhrase) {
       setError('Please confirm you have saved the recovery phrase');
       return;
     }
-    onComplete();
+    const words = recoveryPhrase.split(' ');
+    const indices = generateVerificationIndices(words.length);
+    setVerificationWords(indices);
+    setVerificationInputs({});
+    setError(null);
+    setStep('verify');
   };
+
+  const handleVerifyWords = () => {
+    const words = recoveryPhrase.split(' ');
+    let allCorrect = true;
+
+    for (const idx of verificationWords) {
+      const input = verificationInputs[idx]?.toLowerCase().trim();
+      if (input !== words[idx]) {
+        allCorrect = false;
+        break;
+      }
+    }
+
+    if (allCorrect) {
+      onComplete();
+    } else {
+      setError('Words do not match. Please check your recovery phrase.');
+    }
+  };
+
+  const phraseWords = useMemo(() => recoveryPhrase.split(' '), [recoveryPhrase]);
 
   // Step 1: Choose type
   if (step === 'choose') {
@@ -202,21 +244,32 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
     );
   }
 
-  // Step 3: Recovery phrase
+  // Step 3: Recovery phrase display
   if (step === 'recovery') {
     return (
       <div className="flex flex-col gap-4 p-4">
         <div className="text-center mb-2">
-          <h2 className="text-lg font-semibold text-white">Recovery Phrase</h2>
+          <h2 className="text-lg font-semibold text-white">Recovery Seed Phrase</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Save this phrase to recover your wallet if you forget your {authType}
+            This phrase controls your wallet. Write it down carefully!
           </p>
+        </div>
+
+        {/* Critical warning */}
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-sm">
+          <ShieldAlert className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">This seed phrase controls real funds</p>
+            <p className="mt-1 text-red-400/80">
+              Anyone with this phrase can restore your wallet and spend your ecash. Never share it. Store it safely offline.
+            </p>
+          </div>
         </div>
 
         <Card className="bg-card border-0">
           <CardContent className="p-4">
             <div className="grid grid-cols-3 gap-2 text-sm">
-              {recoveryPhrase.split(' ').map((word, i) => (
+              {phraseWords.map((word, i) => (
                 <div key={i} className="bg-popover rounded p-2 text-center">
                   <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
                   <span className="text-white">{word}</span>
@@ -234,13 +287,6 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
           )}
         </Button>
 
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <span>
-            Write this down and store it safely. You will need it to recover your wallet if you forget your {authType}.
-          </span>
-        </div>
-
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <input
             type="checkbox"
@@ -248,7 +294,7 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
             onChange={(e) => setAcknowledgedPhrase(e.target.checked)}
             className="rounded"
           />
-          I have saved my recovery phrase
+          I have saved my recovery phrase securely
         </label>
 
         {error && (
@@ -258,8 +304,59 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
           </div>
         )}
 
-        <Button onClick={handleFinish} disabled={!acknowledgedPhrase}>
-          Finish Setup
+        <Button onClick={handleProceedToVerify} disabled={!acknowledgedPhrase}>
+          Verify Phrase
+        </Button>
+      </div>
+    );
+  }
+
+  // Step 4: Verify recovery phrase
+  if (step === 'verify') {
+    return (
+      <div className="flex flex-col gap-4 p-4">
+        <div className="text-center mb-2">
+          <h2 className="text-lg font-semibold text-white">Verify Your Phrase</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Enter the requested words to confirm you saved your phrase
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {verificationWords.map((wordIdx) => (
+            <div key={wordIdx} className="space-y-2">
+              <Label>Word #{wordIdx + 1}</Label>
+              <Input
+                type="text"
+                placeholder={`Enter word ${wordIdx + 1}`}
+                value={verificationInputs[wordIdx] || ''}
+                onChange={(e) =>
+                  setVerificationInputs((prev) => ({
+                    ...prev,
+                    [wordIdx]: e.target.value,
+                  }))
+                }
+                className="bg-card border-input"
+                autoCapitalize="none"
+                autoComplete="off"
+              />
+            </div>
+          ))}
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <Button onClick={handleVerifyWords}>
+          Complete Setup
+        </Button>
+
+        <Button variant="ghost" onClick={() => setStep('recovery')} className="text-muted-foreground">
+          Back to Phrase
         </Button>
       </div>
     );
