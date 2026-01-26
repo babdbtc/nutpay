@@ -1,7 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { MintConfig, PendingMintQuote } from '../../shared/types';
 import { QRCode } from './QRCode';
 import { formatAmount } from '../../shared/format';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Check, AlertCircle, Clock } from 'lucide-react';
 
 interface LightningReceiveProps {
   mints: MintConfig[];
@@ -10,129 +15,9 @@ interface LightningReceiveProps {
   onClose: () => void;
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '12px',
-    color: '#888',
-    fontWeight: 500,
-  },
-  input: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #374151',
-    background: '#252542',
-    color: '#fff',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-  },
-  select: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #374151',
-    background: '#252542',
-    color: '#fff',
-    fontSize: '14px',
-    cursor: 'pointer',
-  },
-  button: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  primaryBtn: {
-    background: '#22c55e',
-    color: 'white',
-  },
-  secondaryBtn: {
-    background: '#374151',
-    color: '#ccc',
-  },
-  disabledBtn: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
-  },
-  qrContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px',
-    background: '#252542',
-    borderRadius: '12px',
-  },
-  invoiceText: {
-    fontSize: '10px',
-    color: '#666',
-    wordBreak: 'break-all',
-    maxHeight: '60px',
-    overflow: 'auto',
-    padding: '8px',
-    background: '#1a1a2e',
-    borderRadius: '6px',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  copyBtn: {
-    padding: '8px 16px',
-    borderRadius: '6px',
-    border: 'none',
-    background: '#374151',
-    color: '#fff',
-    fontSize: '12px',
-    cursor: 'pointer',
-  },
-  status: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '8px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-  pendingStatus: {
-    background: '#f59e0b22',
-    color: '#f59e0b',
-  },
-  successStatus: {
-    background: '#22c55e22',
-    color: '#22c55e',
-  },
-  errorStatus: {
-    background: '#ef444422',
-    color: '#ef4444',
-  },
-  amountDisplay: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: '#f7931a',
-    textAlign: 'center',
-  },
-  actions: {
-    display: 'flex',
-    gap: '12px',
-  },
-};
-
 export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: LightningReceiveProps) {
   const [amount, setAmount] = useState('');
-  const [selectedMint, setSelectedMint] = useState(mints[0]?.url || '');
+  const [selectedMint, setSelectedMint] = useState(mints.filter(m => m.enabled)[0]?.url || '');
   const [loading, setLoading] = useState(false);
   const [quote, setQuote] = useState<PendingMintQuote | null>(null);
   const [status, setStatus] = useState<'idle' | 'waiting' | 'paid' | 'minting' | 'success' | 'error'>('idle');
@@ -141,7 +26,6 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
 
   const pollingRef = useRef<number | null>(null);
 
-  // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) {
@@ -176,7 +60,7 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
       } else {
         setError(result.error || 'Failed to create invoice');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create invoice');
     } finally {
       setLoading(false);
@@ -184,7 +68,6 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   };
 
   const startPolling = (quoteId: string, amountNum: number) => {
-    // Poll every 3 seconds
     pollingRef.current = window.setInterval(async () => {
       try {
         const result = await chrome.runtime.sendMessage({
@@ -194,7 +77,6 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
         });
 
         if (result.paid) {
-          // Stop polling
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
@@ -202,7 +84,6 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
 
           setStatus('minting');
 
-          // Mint the proofs
           const mintResult = await chrome.runtime.sendMessage({
             type: 'MINT_PROOFS',
             mintUrl: selectedMint,
@@ -248,61 +129,59 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   // Show invoice and status
   if (quote && status !== 'idle') {
     return (
-      <div style={styles.container}>
-        <div style={styles.amountDisplay}>
+      <div className="flex flex-col gap-4">
+        <p className="text-xl font-semibold text-primary text-center">
           {formatAmount(quote.amount, displayFormat)}
-        </div>
+        </p>
 
-        <div style={styles.qrContainer}>
+        <div className="flex flex-col items-center gap-3 p-4 bg-[#252542] rounded-xl">
           <QRCode value={quote.invoice} size={180} />
-          <div style={styles.invoiceText}>{quote.invoice}</div>
-          <button style={styles.copyBtn} onClick={copyToClipboard}>
-            {copied ? 'Copied!' : 'Copy Invoice'}
-          </button>
+          <div className="text-[10px] text-muted-foreground break-all max-h-[60px] overflow-auto p-2 bg-[#1a1a2e] rounded-md w-full">
+            {quote.invoice}
+          </div>
+          <Button variant="secondary" size="sm" onClick={copyToClipboard}>
+            {copied ? <><Check className="h-3 w-3 mr-1" /> Copied!</> : 'Copy Invoice'}
+          </Button>
         </div>
 
         {status === 'waiting' && (
-          <div style={{ ...styles.status, ...styles.pendingStatus }}>
+          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
+            <Clock className="h-4 w-4 animate-pulse" />
             Waiting for payment...
           </div>
         )}
 
         {status === 'minting' && (
-          <div style={{ ...styles.status, ...styles.pendingStatus }}>
+          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Payment received! Minting proofs...
           </div>
         )}
 
         {status === 'success' && (
-          <div style={{ ...styles.status, ...styles.successStatus }}>
+          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-500/10 text-green-500 text-sm">
+            <Check className="h-4 w-4" />
             Success! Proofs minted.
           </div>
         )}
 
         {status === 'error' && (
-          <div style={{ ...styles.status, ...styles.errorStatus }}>
+          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+            <AlertCircle className="h-4 w-4" />
             {error || 'An error occurred'}
           </div>
         )}
 
         {(status === 'error' || status === 'success') && (
-          <div style={styles.actions}>
-            <button
-              style={{ ...styles.button, ...styles.secondaryBtn, flex: 1 }}
-              onClick={handleReset}
-            >
-              {status === 'error' ? 'Try Again' : 'Done'}
-            </button>
-          </div>
+          <Button variant="secondary" onClick={handleReset}>
+            {status === 'error' ? 'Try Again' : 'Done'}
+          </Button>
         )}
 
         {status === 'waiting' && (
-          <button
-            style={{ ...styles.button, ...styles.secondaryBtn }}
-            onClick={onClose}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -310,58 +189,53 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
 
   // Show form
   return (
-    <div style={styles.container}>
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Amount (sats)</label>
-        <input
+    <div className="flex flex-col gap-4">
+      <div className="space-y-2">
+        <Label className="text-muted-foreground">Amount (sats)</Label>
+        <Input
           type="number"
-          style={styles.input}
           placeholder="Enter amount..."
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           min="1"
+          className="bg-[#252542] border-[#374151]"
         />
       </div>
 
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>Mint</label>
-        <select
-          style={styles.select}
-          value={selectedMint}
-          onChange={(e) => setSelectedMint(e.target.value)}
-        >
-          {enabledMints.map((mint) => (
-            <option key={mint.url} value={mint.url}>
-              {mint.name}
-            </option>
-          ))}
-        </select>
+      <div className="space-y-2">
+        <Label className="text-muted-foreground">Mint</Label>
+        <Select value={selectedMint} onValueChange={setSelectedMint}>
+          <SelectTrigger className="bg-[#252542] border-[#374151]">
+            <SelectValue placeholder="Select a mint" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#252542] border-[#374151]">
+            {enabledMints.map((mint) => (
+              <SelectItem key={mint.url} value={mint.url}>
+                {mint.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {error && (
-        <div style={{ ...styles.status, ...styles.errorStatus }}>
+        <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+          <AlertCircle className="h-4 w-4" />
           {error}
         </div>
       )}
 
-      <button
-        style={{
-          ...styles.button,
-          ...styles.primaryBtn,
-          ...(loading || !amount ? styles.disabledBtn : {}),
-        }}
+      <Button
+        className="bg-green-500 hover:bg-green-600"
         onClick={handleCreateInvoice}
         disabled={loading || !amount}
       >
-        {loading ? 'Creating Invoice...' : 'Generate Invoice'}
-      </button>
+        {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating...</> : 'Generate Invoice'}
+      </Button>
 
-      <button
-        style={{ ...styles.button, ...styles.secondaryBtn }}
-        onClick={onClose}
-      >
+      <Button variant="secondary" onClick={onClose}>
         Cancel
-      </button>
+      </Button>
     </div>
   );
 }

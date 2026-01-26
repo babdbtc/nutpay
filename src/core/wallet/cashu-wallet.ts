@@ -361,7 +361,7 @@ export async function generateSendToken(
       await storeProofs(changeProofs, normalizedUrl);
     }
 
-    // Record transaction
+    // Record transaction with token for recovery
     await addTransaction({
       type: 'payment',
       amount: actualAmount,
@@ -369,6 +369,7 @@ export async function generateSendToken(
       mintUrl: normalizedUrl,
       origin: 'Send Ecash',
       status: 'completed',
+      token, // Store token for recovery if unredeemed
     });
 
     return { success: true, token, pendingToken };
