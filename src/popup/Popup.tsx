@@ -258,7 +258,7 @@ function Popup() {
   }
 
   return (
-    <div className="popup-container bg-background p-4 flex flex-col gap-4">
+    <div className="popup-container bg-background p-4 flex flex-col gap-3">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-primary">Nutpay</h1>
@@ -269,9 +269,9 @@ function Popup() {
 
       {/* Balance Card */}
       <Card className="bg-card border-0">
-        <CardContent className="p-6 text-center">
-          <p className="text-sm text-muted-foreground mb-2">Total Balance</p>
-          <p className="text-4xl font-bold text-white">
+        <CardContent className="py-4 px-6 text-center">
+          <p className="text-xs text-muted-foreground mb-1">Total Balance</p>
+          <p className="text-3xl font-bold text-white">
             {formatAmount(totalBalance, settings.displayFormat)}
           </p>
         </CardContent>
@@ -300,15 +300,15 @@ function Popup() {
       {/* Mints List */}
       {balances.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-muted-foreground mb-3">Mints</h2>
-          <div className="flex flex-col gap-2">
+          <h2 className="text-xs font-semibold text-muted-foreground mb-2">Mints</h2>
+          <div className="flex flex-col gap-1.5">
             {balances.map((b) => (
               <Card
                 key={b.mintUrl}
                 className="bg-card border-0 cursor-pointer hover:bg-muted transition-colors"
                 onClick={() => setSelectedMintInfo({ url: b.mintUrl, name: b.mintName })}
               >
-                <CardContent className="p-3 flex justify-between items-center">
+                <CardContent className="py-2 px-3 flex justify-between items-center">
                   <span className="text-sm font-medium text-white">{b.mintName}</span>
                   <span className="text-sm text-primary font-medium">
                     {formatAmount(b.balance, settings.displayFormat)}
@@ -321,17 +321,17 @@ function Popup() {
       )}
 
       {/* Recent Activity */}
-      <div className="flex-1">
-        <h2 className="text-sm font-semibold text-muted-foreground mb-3">Recent Activity</h2>
+      <div className="flex-1 flex flex-col min-h-0">
+        <h2 className="text-xs font-semibold text-muted-foreground mb-2">Recent Activity</h2>
         {transactions.length === 0 ? (
-          <p className="text-center text-muted-foreground py-6 text-sm">No transactions yet</p>
+          <p className="text-center text-muted-foreground py-4 text-sm">No transactions yet</p>
         ) : (
           <>
-            <ScrollArea className="h-[140px]">
-              <div className="flex flex-col gap-2">
+            <ScrollArea className="flex-1 min-h-[120px]">
+              <div className="flex flex-col gap-1.5">
                 {transactions.map((tx) => (
                   <Card key={tx.id} className="bg-card border-0">
-                    <CardContent className="p-3 flex justify-between items-center">
+                    <CardContent className="py-2 px-3 flex justify-between items-center">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-white">
                           {tx.type === 'payment' ? getOriginHost(tx.origin) : 'Received'}
@@ -347,7 +347,7 @@ function Popup() {
               </div>
             </ScrollArea>
             <button
-              className="w-full text-center py-2 text-primary text-sm hover:underline mt-2"
+              className="w-full text-center py-1.5 text-primary text-sm hover:underline"
               onClick={() => setView('history')}
             >
               View All Transactions →
@@ -358,7 +358,7 @@ function Popup() {
 
       {/* Receive Modal */}
       <Dialog open={showReceive} onOpenChange={setShowReceive}>
-        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[440px] overflow-y-auto">
+        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[520px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-center">Receive</DialogTitle>
           </DialogHeader>
@@ -414,7 +414,7 @@ function Popup() {
 
       {/* Send Modal */}
       <Dialog open={showSend} onOpenChange={setShowSend}>
-        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[440px] overflow-y-auto">
+        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[520px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-center">Send</DialogTitle>
           </DialogHeader>
@@ -433,7 +433,7 @@ function Popup() {
 
       {/* Mint Info Modal */}
       <Dialog open={!!selectedMintInfo} onOpenChange={() => setSelectedMintInfo(null)}>
-        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[440px] overflow-y-auto">
+        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[520px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-center">Mint Details</DialogTitle>
           </DialogHeader>
