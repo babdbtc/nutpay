@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { formatAmount } from '../../shared/format';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, AlertCircle } from 'lucide-react';
 
 interface MintInfoModalProps {
   mintUrl: string;
@@ -24,138 +28,6 @@ interface BalanceDetails {
   proofCount: number;
   denominations: Record<number, number>;
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  statusDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '50%',
-  },
-  online: {
-    background: '#22c55e',
-  },
-  offline: {
-    background: '#ef4444',
-  },
-  name: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: '#fff',
-    flex: 1,
-  },
-  section: {
-    background: '#252542',
-    borderRadius: '8px',
-    padding: '12px',
-  },
-  sectionTitle: {
-    fontSize: '12px',
-    color: '#888',
-    fontWeight: 500,
-    marginBottom: '8px',
-  },
-  balanceDisplay: {
-    fontSize: '24px',
-    fontWeight: 700,
-    color: '#f7931a',
-    textAlign: 'center',
-    padding: '8px 0',
-  },
-  row: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '6px 0',
-    borderBottom: '1px solid #333',
-  },
-  rowLast: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '6px 0',
-  },
-  label: {
-    color: '#888',
-    fontSize: '13px',
-  },
-  value: {
-    color: '#fff',
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  url: {
-    fontSize: '11px',
-    color: '#666',
-    wordBreak: 'break-all',
-    marginTop: '4px',
-  },
-  denomList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-    marginTop: '8px',
-  },
-  denomItem: {
-    background: '#1a1a2e',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    fontSize: '11px',
-    color: '#888',
-  },
-  motd: {
-    fontSize: '12px',
-    color: '#888',
-    fontStyle: 'italic',
-    padding: '8px',
-    background: '#1a1a2e',
-    borderRadius: '6px',
-  },
-  button: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  primaryBtn: {
-    background: '#f7931a',
-    color: 'white',
-  },
-  secondaryBtn: {
-    background: '#374151',
-    color: '#ccc',
-  },
-  disabledBtn: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
-  },
-  loading: {
-    textAlign: 'center',
-    padding: '20px',
-    color: '#888',
-  },
-  error: {
-    textAlign: 'center',
-    padding: '12px',
-    color: '#ef4444',
-    background: '#ef444422',
-    borderRadius: '8px',
-  },
-  actions: {
-    display: 'flex',
-    gap: '12px',
-  },
-};
 
 export function MintInfoModal({
   mintUrl,
@@ -186,7 +58,7 @@ export function MintInfoModal({
 
       setMintInfo(infoResult);
       setBalanceDetails(balanceResult);
-    } catch (err) {
+    } catch {
       setError('Failed to load mint information');
     } finally {
       setLoading(false);
@@ -194,8 +66,6 @@ export function MintInfoModal({
   };
 
   const handleConsolidate = async () => {
-    // This would trigger proof consolidation
-    // For now, just close and refresh
     if (onConsolidate) {
       setConsolidating(true);
       await onConsolidate();
@@ -205,19 +75,23 @@ export function MintInfoModal({
 
   if (loading) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Loading mint information...</div>
+      <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <span className="text-sm">Loading mint information...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={styles.container}>
-        <div style={styles.error}>{error}</div>
-        <button style={{ ...styles.button, ...styles.secondaryBtn }} onClick={onClose}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+          <AlertCircle className="h-4 w-4" />
+          {error}
+        </div>
+        <Button variant="secondary" onClick={onClose}>
           Close
-        </button>
+        </Button>
       </div>
     );
   }
@@ -229,81 +103,104 @@ export function MintInfoModal({
     : [];
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div className="flex flex-col gap-4">
+      {/* Header with status */}
+      <div className="flex items-center gap-3">
         <div
-          style={{
-            ...styles.statusDot,
-            ...(mintInfo?.online ? styles.online : styles.offline),
-          }}
+          className={`w-2.5 h-2.5 rounded-full ${
+            mintInfo?.online ? 'bg-green-500' : 'bg-red-500'
+          }`}
         />
-        <span style={styles.name}>{mintInfo?.name || mintName}</span>
+        <span className="text-base font-semibold text-white flex-1">
+          {mintInfo?.name || mintName}
+        </span>
       </div>
 
-      <div style={styles.url}>{mintUrl}</div>
+      <p className="text-[11px] text-muted-foreground break-all">{mintUrl}</p>
 
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>Balance</div>
-        <div style={styles.balanceDisplay}>
-          {formatAmount(balanceDetails?.balance || 0, displayFormat)}
-        </div>
-        <div style={styles.row}>
-          <span style={styles.label}>Proofs</span>
-          <span style={styles.value}>{balanceDetails?.proofCount || 0}</span>
-        </div>
-      </div>
+      {/* Balance Section */}
+      <Card className="bg-[#252542] border-0">
+        <CardContent className="p-4">
+          <p className="text-xs text-muted-foreground mb-2">Balance</p>
+          <p className="text-2xl font-bold text-primary text-center py-2">
+            {formatAmount(balanceDetails?.balance || 0, displayFormat)}
+          </p>
+          <div className="flex justify-between py-2 border-t border-[#333]">
+            <span className="text-sm text-muted-foreground">Proofs</span>
+            <span className="text-sm text-white font-medium">
+              {balanceDetails?.proofCount || 0}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
+      {/* Denominations */}
       {sortedDenoms.length > 0 && (
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>Denominations</div>
-          <div style={styles.denomList}>
-            {sortedDenoms.map(({ denom, count }) => (
-              <span key={denom} style={styles.denomItem}>
-                {denom} x{count}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {mintInfo && (
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>Mint Info</div>
-          {mintInfo.version && (
-            <div style={styles.row}>
-              <span style={styles.label}>Version</span>
-              <span style={styles.value}>{mintInfo.version}</span>
+        <Card className="bg-[#252542] border-0">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-3">Denominations</p>
+            <div className="flex flex-wrap gap-1.5">
+              {sortedDenoms.map(({ denom, count }) => (
+                <Badge
+                  key={denom}
+                  variant="secondary"
+                  className="bg-[#1a1a2e] text-muted-foreground text-[11px] font-normal"
+                >
+                  {denom} x{count}
+                </Badge>
+              ))}
             </div>
-          )}
-          <div style={styles.rowLast}>
-            <span style={styles.label}>Status</span>
-            <span style={styles.value}>{mintInfo.online ? 'Online' : 'Offline'}</span>
-          </div>
-          {mintInfo.motd && <div style={styles.motd}>{mintInfo.motd}</div>}
-        </div>
+          </CardContent>
+        </Card>
       )}
 
-      <div style={styles.actions}>
+      {/* Mint Info */}
+      {mintInfo && (
+        <Card className="bg-[#252542] border-0">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs text-muted-foreground mb-2">Mint Info</p>
+            {mintInfo.version && (
+              <div className="flex justify-between py-1.5 border-b border-[#333]">
+                <span className="text-sm text-muted-foreground">Version</span>
+                <span className="text-sm text-white font-medium">{mintInfo.version}</span>
+              </div>
+            )}
+            <div className="flex justify-between py-1.5">
+              <span className="text-sm text-muted-foreground">Status</span>
+              <span className="text-sm text-white font-medium">
+                {mintInfo.online ? 'Online' : 'Offline'}
+              </span>
+            </div>
+            {mintInfo.motd && (
+              <p className="text-xs text-muted-foreground italic p-2 bg-[#1a1a2e] rounded-md mt-2">
+                {mintInfo.motd}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-3">
         {balanceDetails && balanceDetails.proofCount > 5 && (
-          <button
-            style={{
-              ...styles.button,
-              ...styles.primaryBtn,
-              flex: 1,
-              ...(consolidating ? styles.disabledBtn : {}),
-            }}
+          <Button
+            className="flex-1"
             onClick={handleConsolidate}
             disabled={consolidating}
           >
-            {consolidating ? 'Consolidating...' : 'Consolidate Proofs'}
-          </button>
+            {consolidating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Consolidating...
+              </>
+            ) : (
+              'Consolidate Proofs'
+            )}
+          </Button>
         )}
-        <button
-          style={{ ...styles.button, ...styles.secondaryBtn, flex: 1 }}
-          onClick={onClose}
-        >
+        <Button variant="secondary" className="flex-1" onClick={onClose}>
           Close
-        </button>
+        </Button>
       </div>
     </div>
   );

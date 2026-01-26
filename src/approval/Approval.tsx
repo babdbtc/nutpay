@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 interface PaymentDetails {
   requestId: string;
@@ -12,106 +16,6 @@ interface PaymentDetails {
   balance: number;
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '8px',
-  },
-  title: {
-    fontSize: '18px',
-    fontWeight: 600,
-    marginBottom: '4px',
-  },
-  subtitle: {
-    fontSize: '13px',
-    color: '#888',
-  },
-  card: {
-    background: '#252542',
-    borderRadius: '12px',
-    padding: '16px',
-  },
-  row: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 0',
-    borderBottom: '1px solid #333',
-  },
-  rowLast: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 0',
-  },
-  label: {
-    fontSize: '13px',
-    color: '#888',
-  },
-  value: {
-    fontSize: '14px',
-    fontWeight: 500,
-    maxWidth: '200px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  amount: {
-    fontSize: '28px',
-    fontWeight: 700,
-    textAlign: 'center',
-    padding: '16px 0',
-    color: '#f7931a',
-  },
-  balanceInfo: {
-    textAlign: 'center',
-    fontSize: '12px',
-    color: '#888',
-    marginTop: '-8px',
-    paddingBottom: '8px',
-  },
-  checkbox: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '13px',
-    color: '#aaa',
-  },
-  buttons: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '8px',
-  },
-  button: {
-    flex: 1,
-    padding: '14px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '15px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'background 0.2s',
-  },
-  approveBtn: {
-    background: '#22c55e',
-    color: 'white',
-  },
-  denyBtn: {
-    background: '#374151',
-    color: '#ccc',
-  },
-  timer: {
-    textAlign: 'center',
-    fontSize: '12px',
-    color: '#666',
-  },
-};
-
 function Approval() {
   const [details, setDetails] = useState<PaymentDetails | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -119,7 +23,6 @@ function Approval() {
   const [timeLeft, setTimeLeft] = useState(60);
 
   useEffect(() => {
-    // Parse URL parameters
     const params = new URLSearchParams(window.location.search);
     setDetails({
       requestId: params.get('requestId') || '',
@@ -130,14 +33,12 @@ function Approval() {
       balance: parseInt(params.get('balance') || '0', 10),
     });
 
-    // Load settings for display format
     chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }).then((data) => {
       if (data) setSettings(data);
     });
   }, []);
 
   useEffect(() => {
-    // Countdown timer
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -162,7 +63,6 @@ function Approval() {
       rememberSite,
     });
 
-    // Close the popup
     window.close();
   };
 
@@ -170,7 +70,11 @@ function Approval() {
   const handleDeny = () => sendResponse(false);
 
   if (!details) {
-    return <div style={styles.container}>Loading...</div>;
+    return (
+      <div className="approval-container bg-[#16162a] min-h-screen flex items-center justify-center text-muted-foreground">
+        Loading...
+      </div>
+    );
   }
 
   const mintHost = (() => {
@@ -192,60 +96,76 @@ function Approval() {
   const remainingBalance = details.balance - details.amount;
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.title}>Payment Request</div>
-        <div style={styles.subtitle}>A site is requesting payment</div>
+    <div className="approval-container bg-[#16162a] min-h-screen text-white flex flex-col gap-4">
+      {/* Header */}
+      <div className="text-center mb-2">
+        <h1 className="text-lg font-semibold mb-1">Payment Request</h1>
+        <p className="text-sm text-muted-foreground">A site is requesting payment</p>
       </div>
 
-      <div style={styles.card}>
-        <div style={styles.amount}>
-          {formatAmount(details.amount, settings.displayFormat)}
-        </div>
-        <div style={styles.balanceInfo}>
-          Balance: {formatAmount(details.balance, settings.displayFormat)} → {formatAmount(remainingBalance, settings.displayFormat)} after
-        </div>
+      {/* Payment Details Card */}
+      <Card className="bg-[#252542] border-0">
+        <CardContent className="p-4">
+          {/* Amount */}
+          <p className="text-3xl font-bold text-primary text-center py-4">
+            {formatAmount(details.amount, settings.displayFormat)}
+          </p>
+          <p className="text-center text-xs text-muted-foreground -mt-2 pb-4">
+            Balance: {formatAmount(details.balance, settings.displayFormat)} {' '}
+            {formatAmount(remainingBalance, settings.displayFormat)} after
+          </p>
 
-        <div style={styles.row}>
-          <span style={styles.label}>From</span>
-          <span style={styles.value} title={details.origin}>
-            {siteHost}
-          </span>
-        </div>
+          {/* Details */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center py-2 border-b border-[#333]">
+              <span className="text-sm text-muted-foreground">From</span>
+              <span className="text-sm font-medium truncate max-w-[200px]" title={details.origin}>
+                {siteHost}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-sm text-muted-foreground">Mint</span>
+              <span className="text-sm font-medium truncate max-w-[200px]" title={details.mint}>
+                {mintHost}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        <div style={styles.rowLast}>
-          <span style={styles.label}>Mint</span>
-          <span style={styles.value} title={details.mint}>
-            {mintHost}
-          </span>
-        </div>
-      </div>
-
-      <label style={styles.checkbox}>
-        <input
-          type="checkbox"
+      {/* Remember Site Checkbox */}
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="remember"
           checked={rememberSite}
-          onChange={(e) => setRememberSite(e.target.checked)}
+          onCheckedChange={(checked) => setRememberSite(checked === true)}
         />
-        Auto-approve future payments from this site
-      </label>
+        <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
+          Auto-approve future payments from this site
+        </Label>
+      </div>
 
-      <div style={styles.buttons}>
-        <button
-          style={{ ...styles.button, ...styles.denyBtn }}
+      {/* Buttons */}
+      <div className="flex gap-3 mt-2">
+        <Button
+          variant="secondary"
+          className="flex-1"
           onClick={handleDeny}
         >
           Deny
-        </button>
-        <button
-          style={{ ...styles.button, ...styles.approveBtn }}
+        </Button>
+        <Button
+          className="flex-1 bg-green-500 hover:bg-green-600"
           onClick={handleApprove}
         >
           Pay
-        </button>
+        </Button>
       </div>
 
-      <div style={styles.timer}>Auto-deny in {timeLeft}s</div>
+      {/* Timer */}
+      <p className="text-center text-xs text-muted-foreground">
+        Auto-deny in {timeLeft}s
+      </p>
     </div>
   );
 }

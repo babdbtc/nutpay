@@ -145,6 +145,7 @@ export interface Transaction {
   origin?: string;
   timestamp: number;
   status: 'pending' | 'completed' | 'failed';
+  token?: string; // For ecash sends, stores the token for recovery
 }
 
 // Wallet balance by mint

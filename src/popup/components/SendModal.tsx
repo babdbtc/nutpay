@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { MintConfig, MeltQuoteInfo } from '../../shared/types';
 import { QRCode } from './QRCode';
 import { formatAmount } from '../../shared/format';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { Loader2, Check, AlertCircle, Copy } from 'lucide-react';
 
 interface SendModalProps {
   mints: MintConfig[];
@@ -11,209 +19,7 @@ interface SendModalProps {
   onClose: () => void;
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  tabs: {
-    display: 'flex',
-    background: '#252542',
-    borderRadius: '8px',
-    padding: '4px',
-  },
-  tab: {
-    flex: 1,
-    padding: '10px',
-    border: 'none',
-    background: 'transparent',
-    color: '#888',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    borderRadius: '6px',
-    transition: 'all 0.2s',
-  },
-  activeTab: {
-    background: '#374151',
-    color: '#fff',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '12px',
-    color: '#888',
-    fontWeight: 500,
-  },
-  input: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #374151',
-    background: '#252542',
-    color: '#fff',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-  },
-  textarea: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #374151',
-    background: '#252542',
-    color: '#fff',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-    minHeight: '80px',
-    resize: 'vertical',
-  },
-  select: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #374151',
-    background: '#252542',
-    color: '#fff',
-    fontSize: '14px',
-    cursor: 'pointer',
-  },
-  button: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  primaryBtn: {
-    background: '#f7931a',
-    color: 'white',
-  },
-  secondaryBtn: {
-    background: '#374151',
-    color: '#ccc',
-  },
-  dangerBtn: {
-    background: '#ef4444',
-    color: 'white',
-  },
-  disabledBtn: {
-    opacity: 0.5,
-    cursor: 'not-allowed',
-  },
-  qrContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px',
-    background: '#252542',
-    borderRadius: '12px',
-  },
-  tokenText: {
-    fontSize: '10px',
-    color: '#666',
-    wordBreak: 'break-all',
-    maxHeight: '80px',
-    overflow: 'auto',
-    padding: '8px',
-    background: '#1a1a2e',
-    borderRadius: '6px',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  copyBtn: {
-    padding: '8px 16px',
-    borderRadius: '6px',
-    border: 'none',
-    background: '#374151',
-    color: '#fff',
-    fontSize: '12px',
-    cursor: 'pointer',
-  },
-  status: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '8px',
-    borderRadius: '8px',
-    fontSize: '13px',
-  },
-  successStatus: {
-    background: '#22c55e22',
-    color: '#22c55e',
-  },
-  errorStatus: {
-    background: '#ef444422',
-    color: '#ef4444',
-  },
-  warningStatus: {
-    background: '#f59e0b22',
-    color: '#f59e0b',
-  },
-  quoteInfo: {
-    background: '#252542',
-    borderRadius: '8px',
-    padding: '12px',
-  },
-  quoteRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '6px 0',
-    borderBottom: '1px solid #333',
-  },
-  quoteRowLast: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '6px 0',
-  },
-  quoteLabel: {
-    color: '#888',
-    fontSize: '13px',
-  },
-  quoteValue: {
-    color: '#fff',
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  totalRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '8px 0',
-    marginTop: '4px',
-    borderTop: '1px solid #444',
-  },
-  totalLabel: {
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: 600,
-  },
-  totalValue: {
-    color: '#f7931a',
-    fontSize: '14px',
-    fontWeight: 600,
-  },
-  actions: {
-    display: 'flex',
-    gap: '12px',
-  },
-  balanceHint: {
-    fontSize: '11px',
-    color: '#666',
-    marginTop: '4px',
-  },
-};
-
-type Tab = 'ecash' | 'lightning';
-
 export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }: SendModalProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('ecash');
   const [amount, setAmount] = useState('');
   const [selectedMint, setSelectedMint] = useState(mints[0]?.url || '');
   const [invoice, setInvoice] = useState('');
@@ -227,16 +33,13 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   const enabledMints = mints.filter((m) => m.enabled);
   const selectedBalance = balances.get(selectedMint) || 0;
 
-  // Reset state when switching tabs
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab);
+  const handleTabChange = () => {
     setError(null);
     setGeneratedToken(null);
     setMeltQuote(null);
     setSuccess(false);
   };
 
-  // Send Ecash
   const handleGenerateToken = async () => {
     const amountNum = parseInt(amount, 10);
     if (!amountNum || amountNum <= 0) {
@@ -271,7 +74,6 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
     }
   };
 
-  // Get melt quote for Lightning
   const handleGetQuote = async () => {
     if (!invoice.trim()) {
       setError('Please enter a Lightning invoice');
@@ -289,7 +91,6 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
       });
 
       if (result.success && result.quote) {
-        // Check if we have enough balance
         const total = result.quote.amount + result.quote.fee;
         if (total > selectedBalance) {
           setError(`Insufficient balance. Need ${total} sats (${result.quote.amount} + ${result.quote.fee} fee), have ${selectedBalance} sats.`);
@@ -306,7 +107,6 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
     }
   };
 
-  // Pay Lightning invoice
   const handlePayInvoice = async () => {
     if (!meltQuote) return;
 
@@ -325,9 +125,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
 
       if (result.success) {
         setSuccess(true);
-        setTimeout(() => {
-          onSuccess();
-        }, 1500);
+        setTimeout(() => onSuccess(), 1500);
       } else {
         setError(result.error || 'Failed to pay invoice');
       }
@@ -346,32 +144,26 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
     }
   };
 
-  const handleDone = () => {
-    onSuccess();
-  };
-
   // Show generated token
   if (generatedToken) {
     return (
-      <div style={styles.container}>
-        <div style={{ ...styles.status, ...styles.successStatus }}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-500/10 text-green-500 text-sm">
+          <Check className="h-4 w-4" />
           Token generated! Share it with the recipient.
         </div>
 
-        <div style={styles.qrContainer}>
+        <div className="flex flex-col items-center gap-3 p-4 bg-[#252542] rounded-xl">
           <QRCode value={generatedToken} size={180} />
-          <div style={styles.tokenText}>{generatedToken}</div>
-          <button style={styles.copyBtn} onClick={copyToClipboard}>
-            {copied ? 'Copied!' : 'Copy Token'}
-          </button>
+          <div className="text-[10px] text-muted-foreground break-all max-h-[80px] overflow-auto p-2 bg-[#1a1a2e] rounded-md w-full">
+            {generatedToken}
+          </div>
+          <Button variant="secondary" size="sm" onClick={copyToClipboard}>
+            {copied ? <><Check className="h-3 w-3 mr-1" /> Copied!</> : <><Copy className="h-3 w-3 mr-1" /> Copy Token</>}
+          </Button>
         </div>
 
-        <button
-          style={{ ...styles.button, ...styles.primaryBtn }}
-          onClick={handleDone}
-        >
-          Done
-        </button>
+        <Button onClick={onSuccess}>Done</Button>
       </div>
     );
   }
@@ -379,16 +171,12 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   // Show success for Lightning
   if (success) {
     return (
-      <div style={styles.container}>
-        <div style={{ ...styles.status, ...styles.successStatus }}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-500/10 text-green-500 text-sm">
+          <Check className="h-4 w-4" />
           Payment sent successfully!
         </div>
-        <button
-          style={{ ...styles.button, ...styles.primaryBtn }}
-          onClick={handleDone}
-        >
-          Done
-        </button>
+        <Button onClick={onSuccess}>Done</Button>
       </div>
     );
   }
@@ -396,162 +184,124 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   // Show melt quote confirmation
   if (meltQuote) {
     return (
-      <div style={styles.container}>
-        <div style={styles.quoteInfo}>
-          <div style={styles.quoteRow}>
-            <span style={styles.quoteLabel}>Invoice Amount</span>
-            <span style={styles.quoteValue}>{formatAmount(meltQuote.amount, displayFormat)}</span>
-          </div>
-          <div style={styles.quoteRow}>
-            <span style={styles.quoteLabel}>Fee Reserve</span>
-            <span style={styles.quoteValue}>{formatAmount(meltQuote.fee, displayFormat)}</span>
-          </div>
-          <div style={styles.totalRow}>
-            <span style={styles.totalLabel}>Total</span>
-            <span style={styles.totalValue}>
-              {formatAmount(meltQuote.amount + meltQuote.fee, displayFormat)}
-            </span>
-          </div>
-        </div>
+      <div className="flex flex-col gap-4">
+        <Card className="bg-[#252542] border-0">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex justify-between py-2 border-b border-[#333]">
+              <span className="text-muted-foreground text-sm">Invoice Amount</span>
+              <span className="text-white text-sm font-medium">{formatAmount(meltQuote.amount, displayFormat)}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#333]">
+              <span className="text-muted-foreground text-sm">Fee Reserve</span>
+              <span className="text-white text-sm font-medium">{formatAmount(meltQuote.fee, displayFormat)}</span>
+            </div>
+            <div className="flex justify-between py-2 pt-3 border-t border-[#444]">
+              <span className="text-white font-semibold">Total</span>
+              <span className="text-primary font-semibold">{formatAmount(meltQuote.amount + meltQuote.fee, displayFormat)}</span>
+            </div>
+          </CardContent>
+        </Card>
 
         {error && (
-          <div style={{ ...styles.status, ...styles.errorStatus }}>
+          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+            <AlertCircle className="h-4 w-4" />
             {error}
           </div>
         )}
 
-        <div style={styles.actions}>
-          <button
-            style={{ ...styles.button, ...styles.secondaryBtn, flex: 1 }}
-            onClick={() => setMeltQuote(null)}
-            disabled={loading}
-          >
+        <div className="flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={() => setMeltQuote(null)} disabled={loading}>
             Cancel
-          </button>
-          <button
-            style={{
-              ...styles.button,
-              ...styles.primaryBtn,
-              flex: 1,
-              ...(loading ? styles.disabledBtn : {}),
-            }}
-            onClick={handlePayInvoice}
-            disabled={loading}
-          >
-            {loading ? 'Paying...' : 'Confirm Payment'}
-          </button>
+          </Button>
+          <Button className="flex-1" onClick={handlePayInvoice} disabled={loading}>
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Paying...</> : 'Confirm Payment'}
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.tabs}>
-        <button
-          style={{ ...styles.tab, ...(activeTab === 'ecash' ? styles.activeTab : {}) }}
-          onClick={() => handleTabChange('ecash')}
-        >
-          Ecash
-        </button>
-        <button
-          style={{ ...styles.tab, ...(activeTab === 'lightning' ? styles.activeTab : {}) }}
-          onClick={() => handleTabChange('lightning')}
-        >
-          Lightning
-        </button>
-      </div>
+    <Tabs defaultValue="ecash" className="w-full" onValueChange={handleTabChange}>
+      <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+        <TabsTrigger value="ecash">Ecash</TabsTrigger>
+        <TabsTrigger value="lightning">Lightning</TabsTrigger>
+      </TabsList>
 
-      <div style={styles.inputGroup}>
-        <label style={styles.label}>From Mint</label>
-        <select
-          style={styles.select}
-          value={selectedMint}
-          onChange={(e) => setSelectedMint(e.target.value)}
-        >
-          {enabledMints.map((mint) => (
-            <option key={mint.url} value={mint.url}>
-              {mint.name} ({formatAmount(balances.get(mint.url) || 0, displayFormat)})
-            </option>
-          ))}
-        </select>
-        <div style={styles.balanceHint}>
-          Available: {formatAmount(selectedBalance, displayFormat)}
+      <div className="mt-4 space-y-4">
+        <div className="space-y-2">
+          <Label className="text-muted-foreground">From Mint</Label>
+          <Select value={selectedMint} onValueChange={setSelectedMint}>
+            <SelectTrigger className="bg-[#252542] border-[#374151]">
+              <SelectValue placeholder="Select a mint" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#252542] border-[#374151]">
+              {enabledMints.map((mint) => (
+                <SelectItem key={mint.url} value={mint.url}>
+                  {mint.name} ({formatAmount(balances.get(mint.url) || 0, displayFormat)})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Available: {formatAmount(selectedBalance, displayFormat)}
+          </p>
         </div>
-      </div>
 
-      {activeTab === 'ecash' ? (
-        <>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Amount (sats)</label>
-            <input
+        <TabsContent value="ecash" className="mt-0 space-y-4">
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">Amount (sats)</Label>
+            <Input
               type="number"
-              style={styles.input}
               placeholder="Enter amount..."
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               min="1"
               max={selectedBalance}
+              className="bg-[#252542] border-[#374151]"
             />
           </div>
 
           {error && (
-            <div style={{ ...styles.status, ...styles.errorStatus }}>
+            <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+              <AlertCircle className="h-4 w-4" />
               {error}
             </div>
           )}
 
-          <button
-            style={{
-              ...styles.button,
-              ...styles.primaryBtn,
-              ...(loading || !amount ? styles.disabledBtn : {}),
-            }}
-            onClick={handleGenerateToken}
-            disabled={loading || !amount}
-          >
-            {loading ? 'Generating...' : 'Generate Token'}
-          </button>
-        </>
-      ) : (
-        <>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Lightning Invoice</label>
-            <textarea
-              style={styles.textarea}
+          <Button className="w-full" onClick={handleGenerateToken} disabled={loading || !amount}>
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Generating...</> : 'Generate Token'}
+          </Button>
+        </TabsContent>
+
+        <TabsContent value="lightning" className="mt-0 space-y-4">
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">Lightning Invoice</Label>
+            <Textarea
               placeholder="Paste Lightning invoice (lnbc...)"
               value={invoice}
               onChange={(e) => setInvoice(e.target.value)}
+              className="bg-[#252542] border-[#374151] min-h-[80px]"
             />
           </div>
 
           {error && (
-            <div style={{ ...styles.status, ...styles.errorStatus }}>
+            <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+              <AlertCircle className="h-4 w-4" />
               {error}
             </div>
           )}
 
-          <button
-            style={{
-              ...styles.button,
-              ...styles.primaryBtn,
-              ...(loading || !invoice.trim() ? styles.disabledBtn : {}),
-            }}
-            onClick={handleGetQuote}
-            disabled={loading || !invoice.trim()}
-          >
-            {loading ? 'Getting Quote...' : 'Get Quote'}
-          </button>
-        </>
-      )}
+          <Button className="w-full" onClick={handleGetQuote} disabled={loading || !invoice.trim()}>
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Getting Quote...</> : 'Get Quote'}
+          </Button>
+        </TabsContent>
 
-      <button
-        style={{ ...styles.button, ...styles.secondaryBtn }}
-        onClick={onClose}
-      >
-        Cancel
-      </button>
-    </div>
+        <Button variant="secondary" className="w-full" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </Tabs>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { MintBalance, Transaction, Settings, MintConfig } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount, formatTransactionAmount } from '../shared/format';
@@ -6,229 +6,14 @@ import { LightningReceive } from './components/LightningReceive';
 import { SendModal } from './components/SendModal';
 import { MintInfoModal } from './components/MintInfoModal';
 import { TransactionHistory } from './components/TransactionHistory';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2 } from 'lucide-react';
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '8px',
-  },
-  logo: {
-    fontSize: '20px',
-    fontWeight: 700,
-    color: '#f7931a',
-  },
-  settingsBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#888',
-    cursor: 'pointer',
-    fontSize: '18px',
-    padding: '4px',
-  },
-  balanceCard: {
-    background: 'linear-gradient(135deg, #252542 0%, #1e1e35 100%)',
-    borderRadius: '16px',
-    padding: '24px',
-    textAlign: 'center',
-  },
-  balanceLabel: {
-    fontSize: '13px',
-    color: '#888',
-    marginBottom: '8px',
-  },
-  balanceAmount: {
-    fontSize: '36px',
-    fontWeight: 700,
-    color: '#fff',
-  },
-  balanceUnit: {
-    fontSize: '16px',
-    color: '#888',
-    marginLeft: '4px',
-  },
-  actions: {
-    display: 'flex',
-    gap: '12px',
-  },
-  actionBtn: {
-    flex: 1,
-    padding: '12px',
-    borderRadius: '8px',
-    border: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  receiveBtn: {
-    background: '#22c55e',
-    color: 'white',
-  },
-  sendBtn: {
-    background: '#374151',
-    color: '#ccc',
-  },
-  section: {
-    marginTop: '8px',
-  },
-  sectionTitle: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#888',
-    marginBottom: '12px',
-  },
-  mintsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  mintItem: {
-    background: '#252542',
-    borderRadius: '8px',
-    padding: '12px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    cursor: 'pointer',
-    transition: 'background 0.2s',
-  },
-  mintItemHover: {
-    background: '#303050',
-  },
-  mintName: {
-    fontSize: '14px',
-    fontWeight: 500,
-  },
-  mintBalance: {
-    fontSize: '14px',
-    color: '#f7931a',
-  },
-  txList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  txItem: {
-    background: '#252542',
-    borderRadius: '8px',
-    padding: '12px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  txInfo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  txOrigin: {
-    fontSize: '14px',
-    fontWeight: 500,
-  },
-  txTime: {
-    fontSize: '12px',
-    color: '#666',
-  },
-  txAmount: {
-    fontSize: '14px',
-    fontWeight: 600,
-  },
-  txPayment: {
-    color: '#ef4444',
-  },
-  txReceive: {
-    color: '#22c55e',
-  },
-  empty: {
-    textAlign: 'center',
-    color: '#666',
-    padding: '24px',
-    fontSize: '14px',
-  },
-  modal: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0,0,0,0.8)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '16px',
-  },
-  modalContent: {
-    background: '#1a1a2e',
-    borderRadius: '16px',
-    padding: '20px',
-    width: '100%',
-    maxWidth: '320px',
-  },
-  modalTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    marginBottom: '16px',
-    textAlign: 'center',
-  },
-  input: {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #374151',
-    background: '#252542',
-    color: '#fff',
-    fontSize: '14px',
-    marginBottom: '12px',
-  },
-  modalActions: {
-    display: 'flex',
-    gap: '12px',
-  },
-  tabs: {
-    display: 'flex',
-    background: '#252542',
-    borderRadius: '8px',
-    padding: '4px',
-    marginBottom: '16px',
-  },
-  tab: {
-    flex: 1,
-    padding: '10px',
-    border: 'none',
-    background: 'transparent',
-    color: '#888',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    borderRadius: '6px',
-    transition: 'all 0.2s',
-  },
-  activeTab: {
-    background: '#374151',
-    color: '#fff',
-  },
-  sendBtnEnabled: {
-    background: '#f7931a',
-    color: 'white',
-    cursor: 'pointer',
-  },
-  viewAllLink: {
-    textAlign: 'center',
-    padding: '8px',
-    color: '#f7931a',
-    fontSize: '13px',
-    cursor: 'pointer',
-    marginTop: '8px',
-  },
-};
-
-type ReceiveTab = 'ecash' | 'lightning';
 type View = 'main' | 'history';
 
 function Popup() {
@@ -241,7 +26,6 @@ function Popup() {
   const [showReceive, setShowReceive] = useState(false);
   const [showSend, setShowSend] = useState(false);
   const [selectedMintInfo, setSelectedMintInfo] = useState<{ url: string; name: string } | null>(null);
-  const [receiveTab, setReceiveTab] = useState<ReceiveTab>('ecash');
   const [tokenInput, setTokenInput] = useState('');
   const [receiving, setReceiving] = useState(false);
 
@@ -320,8 +104,8 @@ function Popup() {
 
   if (loading) {
     return (
-      <div style={styles.container}>
-        <div style={styles.empty}>Loading...</div>
+      <div className="popup-container flex items-center justify-center bg-[#16162a]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -329,7 +113,7 @@ function Popup() {
   // Transaction History view
   if (view === 'history') {
     return (
-      <div style={styles.container}>
+      <div className="popup-container bg-[#16162a] p-4">
         <TransactionHistory
           displayFormat={settings.displayFormat}
           onBack={() => setView('main')}
@@ -339,154 +123,143 @@ function Popup() {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={styles.logo}>Nutpay</div>
-        <button style={styles.settingsBtn} onClick={openOptions}>
-          ⚙️
-        </button>
+    <div className="popup-container bg-[#16162a] p-4 flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h1 className="text-xl font-bold text-primary">Nutpay</h1>
+        <Button variant="ghost" size="icon" onClick={openOptions} className="text-muted-foreground hover:text-foreground">
+          <SettingsIcon className="h-5 w-5" />
+        </Button>
       </div>
 
-      <div style={styles.balanceCard}>
-        <div style={styles.balanceLabel}>Total Balance</div>
-        <div>
-          <span style={styles.balanceAmount}>
+      {/* Balance Card */}
+      <Card className="bg-gradient-to-br from-[#252542] to-[#1e1e35] border-0">
+        <CardContent className="p-6 text-center">
+          <p className="text-sm text-muted-foreground mb-2">Total Balance</p>
+          <p className="text-4xl font-bold text-white">
             {formatAmount(totalBalance, settings.displayFormat)}
-          </span>
-        </div>
-      </div>
+          </p>
+        </CardContent>
+      </Card>
 
-      <div style={styles.actions}>
-        <button
-          style={{ ...styles.actionBtn, ...styles.receiveBtn }}
+      {/* Action Buttons */}
+      <div className="flex gap-3">
+        <Button
+          className="flex-1 bg-green-500 hover:bg-green-600"
           onClick={() => setShowReceive(true)}
         >
+          <ArrowDownLeft className="mr-2 h-4 w-4" />
           Receive
-        </button>
-        <button
-          style={{
-            ...styles.actionBtn,
-            ...(totalBalance > 0 ? styles.sendBtnEnabled : styles.sendBtn),
-          }}
+        </Button>
+        <Button
+          className="flex-1"
+          variant={totalBalance > 0 ? "default" : "secondary"}
           onClick={() => setShowSend(true)}
           disabled={totalBalance === 0}
         >
+          <ArrowUpRight className="mr-2 h-4 w-4" />
           Send
-        </button>
+        </Button>
       </div>
 
+      {/* Mints List */}
       {balances.length > 0 && (
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>Mints</div>
-          <div style={styles.mintsList}>
+        <div>
+          <h2 className="text-sm font-semibold text-muted-foreground mb-3">Mints</h2>
+          <div className="flex flex-col gap-2">
             {balances.map((b) => (
-              <div
+              <Card
                 key={b.mintUrl}
-                style={styles.mintItem}
+                className="bg-[#252542] border-0 cursor-pointer hover:bg-[#303050] transition-colors"
                 onClick={() => setSelectedMintInfo({ url: b.mintUrl, name: b.mintName })}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#303050';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#252542';
-                }}
               >
-                <span style={styles.mintName}>{b.mintName}</span>
-                <span style={styles.mintBalance}>
-                  {formatAmount(b.balance, settings.displayFormat)}
-                </span>
-              </div>
+                <CardContent className="p-3 flex justify-between items-center">
+                  <span className="text-sm font-medium text-white">{b.mintName}</span>
+                  <span className="text-sm text-primary font-medium">
+                    {formatAmount(b.balance, settings.displayFormat)}
+                  </span>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>
       )}
 
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>Recent Activity</div>
+      {/* Recent Activity */}
+      <div className="flex-1">
+        <h2 className="text-sm font-semibold text-muted-foreground mb-3">Recent Activity</h2>
         {transactions.length === 0 ? (
-          <div style={styles.empty}>No transactions yet</div>
+          <p className="text-center text-muted-foreground py-6 text-sm">No transactions yet</p>
         ) : (
           <>
-            <div style={styles.txList}>
-              {transactions.map((tx) => (
-                <div key={tx.id} style={styles.txItem}>
-                  <div style={styles.txInfo}>
-                    <span style={styles.txOrigin}>
-                      {tx.type === 'payment'
-                        ? getOriginHost(tx.origin)
-                        : 'Received'}
-                    </span>
-                    <span style={styles.txTime}>{formatTime(tx.timestamp)}</span>
-                  </div>
-                  <span
-                    style={{
-                      ...styles.txAmount,
-                      ...(tx.type === 'payment' ? styles.txPayment : styles.txReceive),
-                    }}
-                  >
-                    {formatTransactionAmount(tx.amount, tx.type, settings.displayFormat)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div
-              style={styles.viewAllLink}
+            <ScrollArea className="h-[140px]">
+              <div className="flex flex-col gap-2">
+                {transactions.map((tx) => (
+                  <Card key={tx.id} className="bg-[#252542] border-0">
+                    <CardContent className="p-3 flex justify-between items-center">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-white">
+                          {tx.type === 'payment' ? getOriginHost(tx.origin) : 'Received'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{formatTime(tx.timestamp)}</span>
+                      </div>
+                      <span className={`text-sm font-semibold ${tx.type === 'payment' ? 'text-red-400' : 'text-green-400'}`}>
+                        {formatTransactionAmount(tx.amount, tx.type, settings.displayFormat)}
+                      </span>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </ScrollArea>
+            <button
+              className="w-full text-center py-2 text-primary text-sm hover:underline mt-2"
               onClick={() => setView('history')}
             >
               View All Transactions →
-            </div>
+            </button>
           </>
         )}
       </div>
 
-      {showReceive && (
-        <div style={styles.modal}>
-          <div style={styles.modalContent}>
-            <div style={styles.modalTitle}>Receive</div>
-
-            <div style={styles.tabs}>
-              <button
-                style={{ ...styles.tab, ...(receiveTab === 'ecash' ? styles.activeTab : {}) }}
-                onClick={() => setReceiveTab('ecash')}
-              >
-                Ecash
-              </button>
-              <button
-                style={{ ...styles.tab, ...(receiveTab === 'lightning' ? styles.activeTab : {}) }}
-                onClick={() => setReceiveTab('lightning')}
-              >
-                Lightning
-              </button>
-            </div>
-
-            {receiveTab === 'ecash' ? (
-              <>
-                <textarea
-                  style={{ ...styles.input, minHeight: '80px', resize: 'vertical' }}
-                  placeholder="Paste Cashu token here..."
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                />
-                <div style={styles.modalActions}>
-                  <button
-                    style={{ ...styles.actionBtn, ...styles.sendBtn }}
-                    onClick={() => {
-                      setShowReceive(false);
-                      setTokenInput('');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    style={{ ...styles.actionBtn, ...styles.receiveBtn }}
-                    onClick={handleReceive}
-                    disabled={receiving || !tokenInput.trim()}
-                  >
-                    {receiving ? 'Receiving...' : 'Receive'}
-                  </button>
-                </div>
-              </>
-            ) : (
+      {/* Receive Modal */}
+      <Dialog open={showReceive} onOpenChange={setShowReceive}>
+        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-[340px] max-h-[440px] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-center">Receive</DialogTitle>
+          </DialogHeader>
+          <Tabs defaultValue="ecash" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+              <TabsTrigger value="ecash">Ecash</TabsTrigger>
+              <TabsTrigger value="lightning">Lightning</TabsTrigger>
+            </TabsList>
+            <TabsContent value="ecash" className="mt-4">
+              <Textarea
+                placeholder="Paste Cashu token here..."
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                className="bg-[#252542] border-[#374151] min-h-[100px] text-white"
+              />
+              <div className="flex gap-3 mt-4">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowReceive(false);
+                    setTokenInput('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-green-500 hover:bg-green-600"
+                  onClick={handleReceive}
+                  disabled={receiving || !tokenInput.trim()}
+                >
+                  {receiving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Receive'}
+                </Button>
+              </div>
+            </TabsContent>
+            <TabsContent value="lightning" className="mt-4">
               <LightningReceive
                 mints={mints}
                 displayFormat={settings.displayFormat}
@@ -496,33 +269,37 @@ function Popup() {
                 }}
                 onClose={() => setShowReceive(false)}
               />
-            )}
-          </div>
-        </div>
-      )}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
 
-      {showSend && (
-        <div style={styles.modal}>
-          <div style={styles.modalContent}>
-            <div style={styles.modalTitle}>Send</div>
-            <SendModal
-              mints={mints}
-              balances={new Map(balances.map((b) => [b.mintUrl, b.balance]))}
-              displayFormat={settings.displayFormat}
-              onSuccess={() => {
-                setShowSend(false);
-                loadData();
-              }}
-              onClose={() => setShowSend(false)}
-            />
-          </div>
-        </div>
-      )}
+      {/* Send Modal */}
+      <Dialog open={showSend} onOpenChange={setShowSend}>
+        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-[340px] max-h-[440px] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-center">Send</DialogTitle>
+          </DialogHeader>
+          <SendModal
+            mints={mints}
+            balances={new Map(balances.map((b) => [b.mintUrl, b.balance]))}
+            displayFormat={settings.displayFormat}
+            onSuccess={() => {
+              setShowSend(false);
+              loadData();
+            }}
+            onClose={() => setShowSend(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
-      {selectedMintInfo && (
-        <div style={styles.modal}>
-          <div style={styles.modalContent}>
-            <div style={styles.modalTitle}>Mint Details</div>
+      {/* Mint Info Modal */}
+      <Dialog open={!!selectedMintInfo} onOpenChange={() => setSelectedMintInfo(null)}>
+        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-[340px] max-h-[440px] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-center">Mint Details</DialogTitle>
+          </DialogHeader>
+          {selectedMintInfo && (
             <MintInfoModal
               mintUrl={selectedMintInfo.url}
               mintName={selectedMintInfo.name}
@@ -533,9 +310,9 @@ function Popup() {
                 loadData();
               }}
             />
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
