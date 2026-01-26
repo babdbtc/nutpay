@@ -23,6 +23,27 @@ import { getAllowlist, setAllowlistEntry, removeAllowlistEntry, createDefaultAll
 import { getPendingMintQuotes, cleanupOldMintQuotes } from '../core/storage/pending-quote-store';
 import { getPendingTokens, cleanupOldPendingTokens } from '../core/storage/pending-token-store';
 import { getMintDetails, getMintBalanceDetails } from '../core/wallet/mint-manager';
+import {
+  getSecurityConfig,
+  setSecurityConfig,
+  isSessionValid,
+  extendSession,
+  clearSession,
+  recordFailedAttempt,
+  isAccountLocked,
+  storeRecoveryPhrase,
+  getRecoveryPhrase,
+  removeSecurityConfig,
+} from '../core/storage/security-store';
+import {
+  generateSalt,
+  hashCredential,
+  verifyCredential,
+  generateRecoveryPhrase,
+  hashRecoveryPhrase,
+  verifyRecoveryPhrase,
+} from '../core/security/auth';
+import type { SecurityConfig } from '../shared/types';
 
 // Handle messages from content script and popup
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
@@ -171,6 +192,207 @@ async function handleMessage(
         offset?: number;
       };
       return getFilteredTransactions(msg.filters, msg.limit, msg.offset);
+    }
+
+    // Security
+    case 'GET_SECURITY_CONFIG': {
+      const config = await getSecurityConfig();
+      return config ? { enabled: config.enabled, type: config.type } : { enabled: false };
+    }
+
+    case 'SETUP_SECURITY': {
+      const msg = message as ExtensionMessage & {
+        authType: 'pin' | 'password';
+        credential: string;
+        generatePhrase: boolean;
+      };
+
+      const salt = generateSalt();
+      const hash = await hashCredential(msg.credential, salt);
+      const recoveryPhrase = generateRecoveryPhrase();
+      const recoveryPhraseHash = await hashRecoveryPhrase(recoveryPhrase);
+
+      const config: SecurityConfig = {
+        enabled: true,
+        type: msg.authType,
+        hash,
+        salt,
+        recoveryPhraseHash,
+        createdAt: Date.now(),
+      };
+
+      await setSecurityConfig(config);
+      await storeRecoveryPhrase(recoveryPhrase);
+      await extendSession();
+
+      return { success: true, recoveryPhrase };
+    }
+
+    case 'VERIFY_AUTH': {
+      const msg = message as ExtensionMessage & { credential: string };
+
+      // Check if locked
+      const lockStatus = await isAccountLocked();
+      if (lockStatus.locked) {
+        return { success: false, locked: true, remainingMs: lockStatus.remainingMs };
+      }
+
+      const config = await getSecurityConfig();
+      if (!config || !config.enabled) {
+        return { success: true };
+      }
+
+      const isValid = await verifyCredential(msg.credential, config.hash, config.salt);
+
+      if (isValid) {
+        await extendSession();
+        return { success: true };
+      } else {
+        const isNowLocked = await recordFailedAttempt();
+        if (isNowLocked) {
+          const newLockStatus = await isAccountLocked();
+          return { success: false, locked: true, remainingMs: newLockStatus.remainingMs };
+        }
+        return { success: false, error: `Invalid ${config.type}` };
+      }
+    }
+
+    case 'CHECK_SESSION': {
+      const config = await getSecurityConfig();
+      if (!config || !config.enabled) {
+        return { valid: true, securityEnabled: false };
+      }
+
+      const lockStatus = await isAccountLocked();
+      if (lockStatus.locked) {
+        return { valid: false, locked: true, remainingMs: lockStatus.remainingMs };
+      }
+
+      const valid = await isSessionValid();
+      return { valid, securityEnabled: true, authType: config.type };
+    }
+
+    case 'CLEAR_SESSION': {
+      await clearSession();
+      return { success: true };
+    }
+
+    case 'CHANGE_CREDENTIAL': {
+      const msg = message as ExtensionMessage & {
+        currentCredential: string;
+        newAuthType: 'pin' | 'password';
+        newCredential: string;
+      };
+
+      const config = await getSecurityConfig();
+      if (!config || !config.enabled) {
+        return { success: false, error: 'Security not enabled' };
+      }
+
+      // Verify current credential
+      const isValid = await verifyCredential(msg.currentCredential, config.hash, config.salt);
+      if (!isValid) {
+        return { success: false, error: `Invalid current ${config.type}` };
+      }
+
+      // Create new config
+      const newSalt = generateSalt();
+      const newHash = await hashCredential(msg.newCredential, newSalt);
+
+      const newConfig: SecurityConfig = {
+        ...config,
+        type: msg.newAuthType,
+        hash: newHash,
+        salt: newSalt,
+      };
+
+      await setSecurityConfig(newConfig);
+      await extendSession();
+
+      return { success: true };
+    }
+
+    case 'RECOVER_WITH_PHRASE': {
+      const msg = message as ExtensionMessage & {
+        phrase: string;
+        verify?: boolean;
+        newAuthType?: 'pin' | 'password';
+        newCredential?: string;
+      };
+
+      const config = await getSecurityConfig();
+      if (!config || !config.enabled) {
+        return { valid: false, error: 'Security not enabled' };
+      }
+
+      const isValid = await verifyRecoveryPhrase(msg.phrase, config.recoveryPhraseHash);
+
+      if (msg.verify) {
+        return { valid: isValid };
+      }
+
+      if (!isValid) {
+        return { success: false, error: 'Invalid recovery phrase' };
+      }
+
+      if (!msg.newAuthType || !msg.newCredential) {
+        return { success: false, error: 'New credential required' };
+      }
+
+      // Generate new recovery phrase
+      const newSalt = generateSalt();
+      const newHash = await hashCredential(msg.newCredential, newSalt);
+      const newRecoveryPhrase = generateRecoveryPhrase();
+      const newRecoveryPhraseHash = await hashRecoveryPhrase(newRecoveryPhrase);
+
+      const newConfig: SecurityConfig = {
+        enabled: true,
+        type: msg.newAuthType,
+        hash: newHash,
+        salt: newSalt,
+        recoveryPhraseHash: newRecoveryPhraseHash,
+        createdAt: Date.now(),
+      };
+
+      await setSecurityConfig(newConfig);
+      await storeRecoveryPhrase(newRecoveryPhrase);
+      await extendSession();
+
+      return { success: true, newRecoveryPhrase };
+    }
+
+    case 'DISABLE_SECURITY': {
+      const msg = message as ExtensionMessage & { credential: string };
+
+      const config = await getSecurityConfig();
+      if (!config || !config.enabled) {
+        return { success: true };
+      }
+
+      const isValid = await verifyCredential(msg.credential, config.hash, config.salt);
+      if (!isValid) {
+        return { success: false, error: `Invalid ${config.type}` };
+      }
+
+      await removeSecurityConfig();
+      return { success: true };
+    }
+
+    case 'GET_RECOVERY_PHRASE': {
+      const msg = message as ExtensionMessage & { credential: string };
+
+      const config = await getSecurityConfig();
+      if (!config || !config.enabled) {
+        return { success: false, error: 'Security not enabled' };
+      }
+
+      const isValid = await verifyCredential(msg.credential, config.hash, config.salt);
+      if (!isValid) {
+        return { success: false, error: `Invalid ${config.type}` };
+      }
+
+      const phrase = await getRecoveryPhrase();
+      return { success: true, phrase };
     }
 
     default:

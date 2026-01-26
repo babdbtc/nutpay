@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 
 interface PaymentDetails {
   requestId: string;
@@ -66,8 +67,26 @@ function Approval() {
     window.close();
   };
 
-  const handleApprove = () => sendResponse(true);
-  const handleDeny = () => sendResponse(false);
+  const handleApprove = useCallback(() => sendResponse(true), [details, rememberSite]);
+  const handleDeny = useCallback(() => sendResponse(false), [details]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!details) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleApprove();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDeny();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [details, handleApprove, handleDeny]);
 
   if (!details) {
     return (
@@ -153,12 +172,18 @@ function Approval() {
           onClick={handleDeny}
         >
           Deny
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
         <Button
           className="flex-1 bg-green-500 hover:bg-green-600"
           onClick={handleApprove}
         >
           Pay
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-green-400/30">
+            Enter
+          </Badge>
         </Button>
       </div>
 

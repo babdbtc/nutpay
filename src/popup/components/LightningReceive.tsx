@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, Check, AlertCircle, Clock } from 'lucide-react';
 
 interface LightningReceiveProps {
@@ -33,6 +34,23 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
       }
     };
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (status === 'error' || status === 'success') {
+          handleReset();
+        } else {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [status, onClose]);
 
   const enabledMints = mints.filter((m) => m.enabled);
 
@@ -181,6 +199,9 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
         {status === 'waiting' && (
           <Button variant="secondary" onClick={onClose}>
             Cancel
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+              Esc
+            </Badge>
           </Button>
         )}
       </div>
@@ -235,6 +256,9 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
 
       <Button variant="secondary" onClick={onClose}>
         Cancel
+        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+          Esc
+        </Badge>
       </Button>
     </div>
   );

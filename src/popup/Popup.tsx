@@ -6,17 +6,24 @@ import { LightningReceive } from './components/LightningReceive';
 import { SendModal } from './components/SendModal';
 import { MintInfoModal } from './components/MintInfoModal';
 import { TransactionHistory } from './components/TransactionHistory';
+import { SecuritySetup } from './components/SecuritySetup';
+import { LockScreen } from './components/LockScreen';
+import { RecoveryScreen } from './components/RecoveryScreen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2 } from 'lucide-react';
 
 type View = 'main' | 'history';
+type AuthState = 'checking' | 'setup' | 'locked' | 'recovery' | 'unlocked';
 
 function Popup() {
+  const [authState, setAuthState] = useState<AuthState>('checking');
+  const [authType, setAuthType] = useState<'pin' | 'password'>('pin');
   const [view, setView] = useState<View>('main');
   const [balances, setBalances] = useState<MintBalance[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -30,8 +37,41 @@ function Popup() {
   const [receiving, setReceiving] = useState(false);
 
   useEffect(() => {
-    loadData();
+    checkAuth();
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'CHECK_SESSION' });
+
+      if (!result.securityEnabled) {
+        // No security setup - show setup screen for first time, or go directly to unlocked
+        const hasBalance = await chrome.runtime.sendMessage({ type: 'GET_BALANCE' });
+        if (hasBalance && hasBalance.length > 0) {
+          // Has some balance but no security - prompt to setup
+          setAuthState('setup');
+        } else {
+          // New user, skip setup for now
+          setAuthState('unlocked');
+        }
+      } else if (result.valid) {
+        setAuthType(result.authType);
+        setAuthState('unlocked');
+      } else {
+        setAuthType(result.authType);
+        setAuthState('locked');
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setAuthState('unlocked'); // Fail open for now
+    }
+  };
+
+  useEffect(() => {
+    if (authState === 'unlocked') {
+      loadData();
+    }
+  }, [authState]);
 
   const loadData = async () => {
     try {
@@ -102,6 +142,71 @@ function Popup() {
     }
   };
 
+  // Keyboard shortcuts for modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showReceive) {
+          e.preventDefault();
+          setShowReceive(false);
+          setTokenInput('');
+        } else if (showSend) {
+          e.preventDefault();
+          setShowSend(false);
+        } else if (selectedMintInfo) {
+          e.preventDefault();
+          setSelectedMintInfo(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showReceive, showSend, selectedMintInfo]);
+
+  // Auth checking state
+  if (authState === 'checking') {
+    return (
+      <div className="popup-container flex items-center justify-center bg-[#16162a]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Security setup screen
+  if (authState === 'setup') {
+    return (
+      <div className="popup-container bg-[#16162a]">
+        <SecuritySetup
+          onComplete={() => setAuthState('unlocked')}
+          onSkip={() => setAuthState('unlocked')}
+        />
+      </div>
+    );
+  }
+
+  // Lock screen
+  if (authState === 'locked') {
+    return (
+      <LockScreen
+        authType={authType}
+        onUnlock={() => setAuthState('unlocked')}
+        onForgot={() => setAuthState('recovery')}
+      />
+    );
+  }
+
+  // Recovery screen
+  if (authState === 'recovery') {
+    return (
+      <RecoveryScreen
+        onRecovered={() => setAuthState('unlocked')}
+        onBack={() => setAuthState('locked')}
+      />
+    );
+  }
+
+  // Main app loading state
   if (loading) {
     return (
       <div className="popup-container flex items-center justify-center bg-[#16162a]">
@@ -249,6 +354,9 @@ function Popup() {
                   }}
                 >
                   Cancel
+                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                    Esc
+                  </Badge>
                 </Button>
                 <Button
                   className="flex-1 bg-green-500 hover:bg-green-600"

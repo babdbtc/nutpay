@@ -40,6 +40,19 @@ export const STORAGE_KEYS = {
   ENCRYPTION_KEY: 'nutpay_enc_key',
   PENDING_MINT_QUOTES: 'nutpay_pending_mint_quotes',
   PENDING_TOKENS: 'nutpay_pending_tokens',
+  SECURITY_CONFIG: 'nutpay_security',
+  SESSION_STATE: 'nutpay_session',
+  RECOVERY_PHRASE_ENCRYPTED: 'nutpay_recovery_phrase',
+} as const;
+
+// Security constants
+export const SECURITY = {
+  SESSION_TIMEOUT: 15 * 60 * 1000, // 15 minutes
+  MAX_FAILED_ATTEMPTS: 5,
+  LOCKOUT_DURATION: 30 * 1000, // 30 seconds
+  MIN_PIN_LENGTH: 4,
+  MAX_PIN_LENGTH: 6,
+  MIN_PASSWORD_LENGTH: 6,
 } as const;
 
 // Message event names for content script communication
