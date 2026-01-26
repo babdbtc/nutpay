@@ -95,6 +95,16 @@ export const STORAGE_KEYS = {
   SECURITY_CONFIG: 'nutpay_security',
   SESSION_STATE: 'nutpay_session',
   RECOVERY_PHRASE_ENCRYPTED: 'nutpay_recovery_phrase',
+  // NUT-13 seed-based recovery
+  SEED_ENCRYPTED: 'nutpay_seed_encrypted',
+  KEYSET_COUNTERS: 'nutpay_keyset_counters',
+  WALLET_VERSION: 'nutpay_wallet_version',
+} as const;
+
+// Wallet versions for migration
+export const WALLET_VERSIONS = {
+  V1_LEGACY: 1, // Pre-NUT-13, no seed
+  V2_DETERMINISTIC: 2, // NUT-13 with seed and counters
 } as const;
 
 // Security constants

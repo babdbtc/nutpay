@@ -1,34 +1,52 @@
-import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
+import { Mint, Wallet } from '@cashu/cashu-ts';
 import { getMints, getEnabledMints, addMint } from '../storage/settings-store';
 import { getProofs } from '../storage/proof-store';
+import { getSeed } from '../storage/seed-store';
+import { getCounters, setCounter } from '../storage/counter-store';
 import type { MintConfig } from '../../shared/types';
 import { normalizeMintUrl } from '../../shared/format';
 
 // Cache of mint connections
-const mintConnections = new Map<string, CashuMint>();
-const walletConnections = new Map<string, CashuWallet>();
+const mintConnections = new Map<string, Mint>();
+const walletConnections = new Map<string, Wallet>();
 
 // Get or create a mint connection
-export async function getMintConnection(mintUrl: string): Promise<CashuMint> {
+export async function getMintConnection(mintUrl: string): Promise<Mint> {
   const normalizedUrl = normalizeMintUrl(mintUrl);
   if (mintConnections.has(normalizedUrl)) {
     return mintConnections.get(normalizedUrl)!;
   }
 
-  const mint = new CashuMint(normalizedUrl);
+  const mint = new Mint(normalizedUrl);
   mintConnections.set(normalizedUrl, mint);
   return mint;
 }
 
-// Get or create a wallet for a mint
-export async function getWalletForMint(mintUrl: string): Promise<CashuWallet> {
+// Get or create a wallet for a mint (v3 API with seed and counters)
+export async function getWalletForMint(mintUrl: string): Promise<Wallet> {
   const normalizedUrl = normalizeMintUrl(mintUrl);
   if (walletConnections.has(normalizedUrl)) {
     return walletConnections.get(normalizedUrl)!;
   }
 
-  const mint = await getMintConnection(normalizedUrl);
-  const wallet = new CashuWallet(mint);
+  // Get seed and counters for deterministic operations
+  const seed = await getSeed();
+  const counters = await getCounters();
+
+  // Create wallet with v3 API
+  const wallet = new Wallet(normalizedUrl, {
+    unit: 'sat',
+    bip39seed: seed || undefined,
+    ...(Object.keys(counters).length > 0 && { counterInit: counters }),
+  });
+
+  // Wire up counter persistence
+  if (seed) {
+    wallet.on.countersReserved((info: { keysetId: string; next: number }) => {
+      console.log(`[Nutpay] Counter reserved: ${info.keysetId} -> ${info.next}`);
+      setCounter(info.keysetId, info.next);
+    });
+  }
 
   // Load mint keysets - this is required to know fees and validate proofs
   console.log('[Nutpay] Loading mint keysets for:', normalizedUrl);
@@ -36,6 +54,23 @@ export async function getWalletForMint(mintUrl: string): Promise<CashuWallet> {
   console.log('[Nutpay] Mint keysets loaded');
 
   walletConnections.set(normalizedUrl, wallet);
+  return wallet;
+}
+
+// Create a wallet for recovery (with provided seed, starting from counter 0)
+export async function createRecoveryWallet(
+  mintUrl: string,
+  seed: Uint8Array
+): Promise<Wallet> {
+  const normalizedUrl = normalizeMintUrl(mintUrl);
+
+  const wallet = new Wallet(normalizedUrl, {
+    unit: 'sat',
+    bip39seed: seed,
+    // Start from 0 for recovery scanning
+  });
+
+  await wallet.loadMint();
   return wallet;
 }
 
@@ -137,9 +172,7 @@ export async function getMintDetails(mintUrl: string): Promise<{
       name: info.name || new URL(mintUrl).hostname,
       version: info.version,
       description: info.description,
-      contact: info.contact?.map((c) =>
-        Array.isArray(c) ? c.join(': ') : String(c)
-      ),
+      contact: info.contact?.map((c) => `${c.method}: ${c.info}`),
       motd: info.motd,
       nuts: info.nuts,
       online: true,

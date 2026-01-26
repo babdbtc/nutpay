@@ -10,6 +10,7 @@ import { TransactionHistory } from './components/TransactionHistory';
 import { SecuritySetup } from './components/SecuritySetup';
 import { LockScreen } from './components/LockScreen';
 import { RecoveryScreen } from './components/RecoveryScreen';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -20,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2 } from 'lucide-react';
 
 type View = 'main' | 'history';
-type AuthState = 'checking' | 'setup' | 'locked' | 'recovery' | 'unlocked';
+type AuthState = 'checking' | 'welcome' | 'setup' | 'import' | 'locked' | 'recovery' | 'unlocked';
 
 function Popup() {
   const [authState, setAuthState] = useState<AuthState>('checking');
@@ -46,13 +47,18 @@ function Popup() {
       const result = await chrome.runtime.sendMessage({ type: 'CHECK_SESSION' });
 
       if (!result.securityEnabled) {
-        // No security setup - show setup screen for first time, or go directly to unlocked
+        // No security setup - check if this is a fresh install
         const hasBalance = await chrome.runtime.sendMessage({ type: 'GET_BALANCE' });
+        const walletInfo = await chrome.runtime.sendMessage({ type: 'GET_WALLET_INFO' });
+
         if (hasBalance && hasBalance.length > 0) {
           // Has some balance but no security - prompt to setup
           setAuthState('setup');
+        } else if (!walletInfo.hasSeed) {
+          // Fresh install with no seed - show welcome screen
+          setAuthState('welcome');
         } else {
-          // New user, skip setup for now
+          // Has seed but no security (edge case) - go to unlocked
           setAuthState('unlocked');
         }
       } else if (result.valid) {
@@ -64,7 +70,7 @@ function Popup() {
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      setAuthState('unlocked'); // Fail open for now
+      setAuthState('welcome'); // Show welcome on error for fresh installs
     }
   };
 
@@ -177,6 +183,16 @@ function Popup() {
     );
   }
 
+  // Welcome screen for fresh installs
+  if (authState === 'welcome') {
+    return (
+      <WelcomeScreen
+        onCreateNew={() => setAuthState('setup')}
+        onImportExisting={() => setAuthState('import')}
+      />
+    );
+  }
+
   // Security setup screen
   if (authState === 'setup') {
     return (
@@ -186,6 +202,16 @@ function Popup() {
           onSkip={() => setAuthState('unlocked')}
         />
       </div>
+    );
+  }
+
+  // Import wallet screen
+  if (authState === 'import') {
+    return (
+      <RecoveryScreen
+        onRecovered={() => setAuthState('unlocked')}
+        onBack={() => setAuthState('welcome')}
+      />
     );
   }
 

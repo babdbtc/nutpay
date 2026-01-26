@@ -42,7 +42,17 @@ import {
   generateRecoveryPhrase,
   hashRecoveryPhrase,
   verifyRecoveryPhrase,
+  mnemonicToSeed,
+  validateMnemonic,
 } from '../core/security/auth';
+import {
+  recoverFromSeed,
+  getRecoveryProgress,
+  cancelRecovery,
+  isRecoveryInProgress,
+} from '../core/wallet/recovery-service';
+import { storeSeed, hasSeed, getWalletVersion } from '../core/storage/seed-store';
+import { getCounters } from '../core/storage/counter-store';
 import type { SecurityConfig } from '../shared/types';
 
 // Handle messages from content script and popup
@@ -209,8 +219,14 @@ async function handleMessage(
 
       const salt = generateSalt();
       const hash = await hashCredential(msg.credential, salt);
+
+      // Generate BIP39 mnemonic (this IS the recovery phrase)
       const recoveryPhrase = generateRecoveryPhrase();
       const recoveryPhraseHash = await hashRecoveryPhrase(recoveryPhrase);
+
+      // Derive and store the wallet seed for NUT-13
+      const seed = mnemonicToSeed(recoveryPhrase);
+      await storeSeed(seed);
 
       const config: SecurityConfig = {
         enabled: true,
@@ -321,44 +337,53 @@ async function handleMessage(
       };
 
       const config = await getSecurityConfig();
-      if (!config || !config.enabled) {
-        return { valid: false, error: 'Security not enabled' };
+
+      // First, validate BIP39 mnemonic format
+      if (!validateMnemonic(msg.phrase)) {
+        return { valid: false, success: false, error: 'Invalid BIP39 mnemonic' };
       }
 
-      const isValid = await verifyRecoveryPhrase(msg.phrase, config.recoveryPhraseHash);
+      // If security is enabled, also verify against stored hash
+      if (config?.enabled) {
+        const isValid = await verifyRecoveryPhrase(msg.phrase, config.recoveryPhraseHash);
+        if (!isValid) {
+          return { valid: false, success: false, error: 'Phrase does not match stored wallet' };
+        }
+      }
 
+      // For verify-only requests
       if (msg.verify) {
-        return { valid: isValid };
+        return { valid: true };
       }
 
-      if (!isValid) {
-        return { success: false, error: 'Invalid recovery phrase' };
-      }
-
+      // For full recovery with new credentials
       if (!msg.newAuthType || !msg.newCredential) {
         return { success: false, error: 'New credential required' };
       }
 
-      // Generate new recovery phrase
+      // Derive and store the seed from the mnemonic
+      const seed = mnemonicToSeed(msg.phrase);
+      await storeSeed(seed);
+
+      // Setup new security config with the same mnemonic as recovery phrase
       const newSalt = generateSalt();
       const newHash = await hashCredential(msg.newCredential, newSalt);
-      const newRecoveryPhrase = generateRecoveryPhrase();
-      const newRecoveryPhraseHash = await hashRecoveryPhrase(newRecoveryPhrase);
+      const recoveryPhraseHash = await hashRecoveryPhrase(msg.phrase);
 
       const newConfig: SecurityConfig = {
         enabled: true,
         type: msg.newAuthType,
         hash: newHash,
         salt: newSalt,
-        recoveryPhraseHash: newRecoveryPhraseHash,
+        recoveryPhraseHash,
         createdAt: Date.now(),
       };
 
       await setSecurityConfig(newConfig);
-      await storeRecoveryPhrase(newRecoveryPhrase);
+      await storeRecoveryPhrase(msg.phrase);
       await extendSession();
 
-      return { success: true, newRecoveryPhrase };
+      return { success: true };
     }
 
     case 'DISABLE_SECURITY': {
@@ -393,6 +418,70 @@ async function handleMessage(
 
       const phrase = await getRecoveryPhrase();
       return { success: true, phrase };
+    }
+
+    // NUT-13 Seed Recovery
+    case 'GET_WALLET_INFO': {
+      const seedExists = await hasSeed();
+      const version = await getWalletVersion();
+      const counters = await getCounters();
+      return {
+        hasSeed: seedExists,
+        version,
+        keysetCount: Object.keys(counters).length,
+      };
+    }
+
+    case 'SETUP_WALLET_SEED': {
+      const msg = message as ExtensionMessage & { mnemonic: string };
+
+      if (!validateMnemonic(msg.mnemonic)) {
+        return { success: false, error: 'Invalid mnemonic phrase' };
+      }
+
+      const seed = mnemonicToSeed(msg.mnemonic);
+      await storeSeed(seed);
+
+      return { success: true };
+    }
+
+    case 'START_SEED_RECOVERY': {
+      const msg = message as ExtensionMessage & {
+        mnemonic: string;
+        mintUrls: string[];
+      };
+
+      if (!validateMnemonic(msg.mnemonic)) {
+        return { success: false, error: 'Invalid mnemonic phrase' };
+      }
+
+      if (isRecoveryInProgress()) {
+        return { success: false, error: 'Recovery already in progress' };
+      }
+
+      const seed = mnemonicToSeed(msg.mnemonic);
+
+      // Start recovery (this runs in the background)
+      recoverFromSeed(seed, msg.mintUrls)
+        .then((result) => {
+          console.log('[Nutpay] Recovery completed:', result);
+        })
+        .catch((error) => {
+          console.error('[Nutpay] Recovery failed:', error);
+        });
+
+      return { success: true, message: 'Recovery started' };
+    }
+
+    case 'GET_RECOVERY_PROGRESS': {
+      const progress = getRecoveryProgress();
+      const inProgress = isRecoveryInProgress();
+      return { inProgress, progress };
+    }
+
+    case 'CANCEL_RECOVERY': {
+      cancelRecovery();
+      return { success: true };
     }
 
     default:
