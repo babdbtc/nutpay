@@ -42,7 +42,17 @@ export type MessageType =
   | 'GET_PENDING_TOKENS'
   // Mint info
   | 'GET_MINT_INFO'
-  | 'GET_MINT_BALANCE_DETAILS';
+  | 'GET_MINT_BALANCE_DETAILS'
+  // Security
+  | 'GET_SECURITY_CONFIG'
+  | 'SETUP_SECURITY'
+  | 'VERIFY_AUTH'
+  | 'CHECK_SESSION'
+  | 'CLEAR_SESSION'
+  | 'CHANGE_CREDENTIAL'
+  | 'RECOVER_WITH_PHRASE'
+  | 'DISABLE_SECURITY'
+  | 'GET_RECOVERY_PHRASE';
 
 // Base message structure
 export interface BaseMessage {
@@ -201,6 +211,23 @@ export interface MeltQuoteInfo {
   amount: number;
   fee: number;
   expiry: number;
+}
+
+// Security configuration
+export interface SecurityConfig {
+  enabled: boolean;
+  type: 'pin' | 'password';
+  hash: string;              // SHA-256 hash of PIN/password
+  salt: string;              // Random salt for hashing
+  recoveryPhraseHash: string; // Hash to verify recovery phrase
+  createdAt: number;
+}
+
+// Session state (stored separately, more volatile)
+export interface SessionState {
+  expiresAt: number;         // Timestamp when session expires
+  failedAttempts: number;    // Failed auth attempts
+  lockedUntil: number | null; // Timestamp when lockout ends
 }
 
 // Union type for all messages

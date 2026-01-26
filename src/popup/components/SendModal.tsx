@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { MintConfig, MeltQuoteInfo } from '../../shared/types';
 import { QRCode } from './QRCode';
 import { formatAmount } from '../../shared/format';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, Check, AlertCircle, Copy } from 'lucide-react';
 
 interface SendModalProps {
@@ -144,6 +145,25 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
     }
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (meltQuote) {
+          setMeltQuote(null);
+        } else if (generatedToken || success) {
+          onSuccess();
+        } else {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [meltQuote, generatedToken, success, onSuccess, onClose]);
+
   // Show generated token
   if (generatedToken) {
     return (
@@ -212,6 +232,9 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
         <div className="flex gap-3">
           <Button variant="secondary" className="flex-1" onClick={() => setMeltQuote(null)} disabled={loading}>
             Cancel
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+              Esc
+            </Badge>
           </Button>
           <Button className="flex-1" onClick={handlePayInvoice} disabled={loading}>
             {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Paying...</> : 'Confirm Payment'}
@@ -299,6 +322,9 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
 
         <Button variant="secondary" className="w-full" onClick={onClose}>
           Cancel
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     </Tabs>
