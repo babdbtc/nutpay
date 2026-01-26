@@ -7,11 +7,12 @@ import type {
   XCashuPaymentRequest,
 } from '../shared/types';
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
-import { isAutoApproved, recordPayment } from '../core/storage/allowlist-store';
+import { isAutoApproved, recordPayment, getAllowlistEntry } from '../core/storage/allowlist-store';
 import { validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { getMints } from '../core/storage/settings-store';
+import { normalizeMintUrl } from '../shared/format';
 
 // Store pending payments
 const pendingPayments = new Map<string, PendingPayment>();
@@ -26,16 +27,17 @@ async function checkPaymentFeasibility(
   mintName: string;
 }> {
   const { mint: requestedMint, amount } = paymentRequest;
+  const normalizedRequestedMint = normalizeMintUrl(requestedMint);
 
   // Check if we know this mint
   const mints = await getMints();
-  const knownMint = mints.find((m) => m.url === requestedMint);
+  const knownMint = mints.find((m) => normalizeMintUrl(m.url) === normalizedRequestedMint);
   const mintKnown = !!knownMint;
   const mintName = knownMint?.name || new URL(requestedMint).hostname;
 
-  // Check balance for this mint
+  // Check balance for this mint (getBalanceByMint already returns normalized URLs)
   const balances = await getBalanceByMint();
-  const balance = balances.get(requestedMint) || 0;
+  const balance = balances.get(normalizedRequestedMint) || 0;
 
   return {
     canPay: balance >= amount,
@@ -43,6 +45,44 @@ async function checkPaymentFeasibility(
     mintKnown,
     mintName,
   };
+}
+
+// Check spending limits for a site
+async function checkSpendingLimits(
+  origin: string,
+  amount: number
+): Promise<{
+  allowed: boolean;
+  reason?: string;
+}> {
+  const entry = await getAllowlistEntry(origin);
+
+  if (!entry) {
+    // No allowlist entry means no limits (will go through approval popup)
+    return { allowed: true };
+  }
+
+  // Check per-payment limit
+  if (amount > entry.maxPerPayment) {
+    return {
+      allowed: false,
+      reason: `Payment of ${amount} sats exceeds your per-payment limit of ${entry.maxPerPayment} sats for ${new URL(origin).hostname}. Adjust limits in settings.`,
+    };
+  }
+
+  // Check daily limit
+  const today = new Date().toISOString().split('T')[0];
+  const todaySpent = entry.lastResetDate === today ? entry.dailySpent : 0;
+
+  if (todaySpent + amount > entry.maxPerDay) {
+    const remaining = entry.maxPerDay - todaySpent;
+    return {
+      allowed: false,
+      reason: `Payment would exceed your daily limit. Today's spending: ${todaySpent} sats, limit: ${entry.maxPerDay} sats, remaining: ${remaining} sats. Adjust limits in settings.`,
+    };
+  }
+
+  return { allowed: true };
 }
 
 // Handle a payment required message from content script
@@ -80,6 +120,16 @@ export async function handlePaymentRequired(
       type: 'PAYMENT_FAILED',
       requestId,
       error: errorMsg,
+    };
+  }
+
+  // Check spending limits
+  const limitCheck = await checkSpendingLimits(origin, paymentRequest.amount);
+  if (!limitCheck.allowed) {
+    return {
+      type: 'PAYMENT_DENIED',
+      requestId,
+      reason: limitCheck.reason || 'Spending limit exceeded',
     };
   }
 

@@ -1,7 +1,7 @@
 import type { Transaction } from '../../shared/types';
 import { STORAGE_KEYS } from '../../shared/constants';
 
-const MAX_TRANSACTIONS = 100;
+const MAX_TRANSACTIONS = 500;
 
 // Get all transactions
 export async function getTransactions(): Promise<Transaction[]> {
@@ -72,4 +72,54 @@ export async function getTodaySpent(): Promise<number> {
         tx.timestamp >= todayStart
     )
     .reduce((sum, tx) => sum + tx.amount, 0);
+}
+
+// Filter interface for transactions
+export interface TransactionFilters {
+  type?: 'payment' | 'receive';
+  status?: 'pending' | 'completed' | 'failed';
+  startDate?: number;
+  endDate?: number;
+  mintUrl?: string;
+}
+
+// Get filtered transactions with pagination
+export async function getFilteredTransactions(
+  filters?: TransactionFilters,
+  limit: number = 50,
+  offset: number = 0
+): Promise<{
+  transactions: Transaction[];
+  total: number;
+  hasMore: boolean;
+}> {
+  let transactions = await getTransactions();
+
+  // Apply filters
+  if (filters) {
+    if (filters.type) {
+      transactions = transactions.filter((tx) => tx.type === filters.type);
+    }
+    if (filters.status) {
+      transactions = transactions.filter((tx) => tx.status === filters.status);
+    }
+    if (filters.startDate) {
+      transactions = transactions.filter((tx) => tx.timestamp >= filters.startDate!);
+    }
+    if (filters.endDate) {
+      transactions = transactions.filter((tx) => tx.timestamp <= filters.endDate!);
+    }
+    if (filters.mintUrl) {
+      transactions = transactions.filter((tx) => tx.mintUrl === filters.mintUrl);
+    }
+  }
+
+  const total = transactions.length;
+  const paginated = transactions.slice(offset, offset + limit);
+
+  return {
+    transactions: paginated,
+    total,
+    hasMore: offset + limit < total,
+  };
 }

@@ -214,6 +214,47 @@ const styles: Record<string, React.CSSProperties> = {
   nwcSection: {
     marginTop: '16px',
   },
+  editForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginTop: '12px',
+    padding: '12px',
+    background: '#1a1a2e',
+    borderRadius: '8px',
+  },
+  editRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  editLabel: {
+    flex: 1,
+    fontSize: '13px',
+    color: '#888',
+  },
+  editInput: {
+    width: '100px',
+    padding: '8px',
+    borderRadius: '6px',
+    border: '1px solid #374151',
+    background: '#252542',
+    color: '#fff',
+    fontSize: '13px',
+    textAlign: 'right',
+  },
+  editActions: {
+    display: 'flex',
+    gap: '8px',
+    marginTop: '8px',
+  },
+  smallBtn: {
+    padding: '6px 12px',
+    borderRadius: '4px',
+    border: 'none',
+    fontSize: '12px',
+    cursor: 'pointer',
+  },
 };
 
 function Toggle({
@@ -254,6 +295,10 @@ function Options() {
   const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([]);
   const [newMintUrl, setNewMintUrl] = useState('');
   const [loading, setLoading] = useState(true);
+  const [editingEntry, setEditingEntry] = useState<string | null>(null);
+  const [editMaxPerPayment, setEditMaxPerPayment] = useState('');
+  const [editMaxPerDay, setEditMaxPerDay] = useState('');
+  const [editAutoApprove, setEditAutoApprove] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -290,7 +335,11 @@ function Options() {
       m.url === url ? { ...m, enabled } : m
     );
     setMints(updated);
-    // In a real impl, would send to background
+    await chrome.runtime.sendMessage({
+      type: 'UPDATE_MINT',
+      url,
+      updates: { enabled },
+    });
   };
 
   const addMint = async () => {
@@ -310,12 +359,20 @@ function Options() {
       trusted: false,
     };
 
-    setMints([...mints, newMint]);
+    const result = await chrome.runtime.sendMessage({
+      type: 'ADD_MINT',
+      mint: newMint,
+    });
+    setMints(result || [...mints, newMint]);
     setNewMintUrl('');
   };
 
-  const removeMint = (url: string) => {
-    setMints(mints.filter((m) => m.url !== url));
+  const removeMint = async (url: string) => {
+    const result = await chrome.runtime.sendMessage({
+      type: 'REMOVE_MINT',
+      url,
+    });
+    setMints(result || mints.filter((m) => m.url !== url));
   };
 
   const removeFromAllowlist = async (origin: string) => {
@@ -324,6 +381,44 @@ function Options() {
       origin,
     });
     setAllowlist(allowlist.filter((e) => e.origin !== origin));
+  };
+
+  const startEditingEntry = (entry: AllowlistEntry) => {
+    setEditingEntry(entry.origin);
+    setEditMaxPerPayment(String(entry.maxPerPayment));
+    setEditMaxPerDay(String(entry.maxPerDay));
+    setEditAutoApprove(entry.autoApprove);
+  };
+
+  const cancelEditing = () => {
+    setEditingEntry(null);
+    setEditMaxPerPayment('');
+    setEditMaxPerDay('');
+    setEditAutoApprove(false);
+  };
+
+  const saveEntryEdits = async (entry: AllowlistEntry) => {
+    const maxPerPayment = parseInt(editMaxPerPayment, 10) || 100;
+    const maxPerDay = parseInt(editMaxPerDay, 10) || 1000;
+
+    const updatedEntry: AllowlistEntry = {
+      ...entry,
+      maxPerPayment,
+      maxPerDay,
+      autoApprove: editAutoApprove,
+    };
+
+    await chrome.runtime.sendMessage({
+      type: 'UPDATE_ALLOWLIST_ENTRY',
+      entry: updatedEntry,
+    });
+
+    setAllowlist(
+      allowlist.map((e) =>
+        e.origin === entry.origin ? updatedEntry : e
+      )
+    );
+    cancelEditing();
   };
 
   if (loading) {
@@ -488,22 +583,78 @@ function Options() {
         ) : (
           <div style={styles.mintList}>
             {allowlist.map((entry) => (
-              <div key={entry.origin} style={styles.allowlistItem}>
-                <div style={styles.allowlistInfo}>
-                  <span style={styles.allowlistOrigin}>
-                    {new URL(entry.origin).hostname}
-                  </span>
-                  <span style={styles.allowlistLimits}>
-                    Max {formatAmount(entry.maxPerPayment, settings.displayFormat)}/payment, {formatAmount(entry.maxPerDay, settings.displayFormat)}/day
-                    {entry.autoApprove && ' (auto-approve)'}
-                  </span>
+              <div key={entry.origin}>
+                <div style={styles.allowlistItem}>
+                  <div style={styles.allowlistInfo}>
+                    <span style={styles.allowlistOrigin}>
+                      {new URL(entry.origin).hostname}
+                    </span>
+                    <span style={styles.allowlistLimits}>
+                      Max {formatAmount(entry.maxPerPayment, settings.displayFormat)}/payment, {formatAmount(entry.maxPerDay, settings.displayFormat)}/day
+                      {entry.autoApprove && ' (auto-approve)'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      style={{ ...styles.button, ...styles.primaryBtn }}
+                      onClick={() => startEditingEntry(entry)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      style={{ ...styles.button, ...styles.secondaryBtn }}
+                      onClick={() => removeFromAllowlist(entry.origin)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <button
-                  style={{ ...styles.button, ...styles.secondaryBtn }}
-                  onClick={() => removeFromAllowlist(entry.origin)}
-                >
-                  Remove
-                </button>
+
+                {editingEntry === entry.origin && (
+                  <div style={styles.editForm}>
+                    <div style={styles.editRow}>
+                      <span style={styles.editLabel}>Max per payment (sats)</span>
+                      <input
+                        type="number"
+                        style={styles.editInput}
+                        value={editMaxPerPayment}
+                        onChange={(e) => setEditMaxPerPayment(e.target.value)}
+                        min="1"
+                      />
+                    </div>
+                    <div style={styles.editRow}>
+                      <span style={styles.editLabel}>Max per day (sats)</span>
+                      <input
+                        type="number"
+                        style={styles.editInput}
+                        value={editMaxPerDay}
+                        onChange={(e) => setEditMaxPerDay(e.target.value)}
+                        min="1"
+                      />
+                    </div>
+                    <div style={styles.editRow}>
+                      <span style={styles.editLabel}>Auto-approve payments within limits</span>
+                      <Toggle
+                        checked={editAutoApprove}
+                        onChange={(v) => setEditAutoApprove(v)}
+                      />
+                    </div>
+                    <div style={styles.editActions}>
+                      <button
+                        style={{ ...styles.smallBtn, ...styles.secondaryBtn }}
+                        onClick={cancelEditing}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        style={{ ...styles.smallBtn, ...styles.primaryBtn }}
+                        onClick={() => saveEntryEdits(entry)}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

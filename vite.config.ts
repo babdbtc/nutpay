@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync, readdirSync } from 'fs';
 
 // Plugin to fix extension structure after build
 function fixExtensionStructure() {
@@ -15,6 +15,21 @@ function fixExtensionStructure() {
 
       // Copy manifest
       copyFileSync('manifest.json', 'dist/manifest.json');
+
+      // Copy icons
+      const iconsDir = 'assets/icons';
+      const distIconsDir = 'dist/assets/icons';
+      if (existsSync(iconsDir)) {
+        if (!existsSync(distIconsDir)) {
+          mkdirSync(distIconsDir, { recursive: true });
+        }
+        const iconFiles = readdirSync(iconsDir);
+        for (const file of iconFiles) {
+          if (file.endsWith('.png') || file.endsWith('.svg')) {
+            copyFileSync(`${iconsDir}/${file}`, `${distIconsDir}/${file}`);
+          }
+        }
+      }
 
       // Move HTML files from nested paths to root
       const htmlMoves = [
@@ -42,6 +57,13 @@ function fixExtensionStructure() {
   };
 }
 
+// Polyfill banner for service worker - must run before any other code
+const serviceWorkerPolyfill = `
+if (typeof globalThis !== 'undefined' && typeof globalThis.window === 'undefined') {
+  globalThis.window = typeof self !== 'undefined' ? self : globalThis;
+}
+`;
+
 export default defineConfig({
   plugins: [react(), fixExtensionStructure()],
   build: {
@@ -57,6 +79,13 @@ export default defineConfig({
         options: resolve(__dirname, 'src/options/index.html'),
       },
       output: {
+        banner: (chunk) => {
+          // Add polyfill to client chunk (contains cashu-ts) and background
+          if (chunk.name === 'client' || chunk.name === 'background') {
+            return serviceWorkerPolyfill;
+          }
+          return '';
+        },
         entryFileNames: (chunkInfo) => {
           // Background, content, and inject scripts go to root
           if (['background', 'content', 'inject'].includes(chunkInfo.name)) {

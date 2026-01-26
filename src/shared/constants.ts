@@ -38,6 +38,8 @@ export const STORAGE_KEYS = {
   MINTS: 'nutpay_mints',
   TRANSACTIONS: 'nutpay_transactions',
   ENCRYPTION_KEY: 'nutpay_enc_key',
+  PENDING_MINT_QUOTES: 'nutpay_pending_mint_quotes',
+  PENDING_TOKENS: 'nutpay_pending_tokens',
 } as const;
 
 // Message event names for content script communication

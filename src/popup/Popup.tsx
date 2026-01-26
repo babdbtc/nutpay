@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import type { MintBalance, Transaction, Settings } from '../shared/types';
+import type { MintBalance, Transaction, Settings, MintConfig } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount, formatTransactionAmount } from '../shared/format';
+import { LightningReceive } from './components/LightningReceive';
+import { SendModal } from './components/SendModal';
+import { MintInfoModal } from './components/MintInfoModal';
+import { TransactionHistory } from './components/TransactionHistory';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -91,6 +95,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  },
+  mintItemHover: {
+    background: '#303050',
   },
   mintName: {
     fontSize: '14px',
@@ -181,14 +190,58 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: '12px',
   },
+  tabs: {
+    display: 'flex',
+    background: '#252542',
+    borderRadius: '8px',
+    padding: '4px',
+    marginBottom: '16px',
+  },
+  tab: {
+    flex: 1,
+    padding: '10px',
+    border: 'none',
+    background: 'transparent',
+    color: '#888',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    borderRadius: '6px',
+    transition: 'all 0.2s',
+  },
+  activeTab: {
+    background: '#374151',
+    color: '#fff',
+  },
+  sendBtnEnabled: {
+    background: '#f7931a',
+    color: 'white',
+    cursor: 'pointer',
+  },
+  viewAllLink: {
+    textAlign: 'center',
+    padding: '8px',
+    color: '#f7931a',
+    fontSize: '13px',
+    cursor: 'pointer',
+    marginTop: '8px',
+  },
 };
 
+type ReceiveTab = 'ecash' | 'lightning';
+type View = 'main' | 'history';
+
 function Popup() {
+  const [view, setView] = useState<View>('main');
   const [balances, setBalances] = useState<MintBalance[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [mints, setMints] = useState<MintConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReceive, setShowReceive] = useState(false);
+  const [showSend, setShowSend] = useState(false);
+  const [selectedMintInfo, setSelectedMintInfo] = useState<{ url: string; name: string } | null>(null);
+  const [receiveTab, setReceiveTab] = useState<ReceiveTab>('ecash');
   const [tokenInput, setTokenInput] = useState('');
   const [receiving, setReceiving] = useState(false);
 
@@ -198,14 +251,16 @@ function Popup() {
 
   const loadData = async () => {
     try {
-      const [balanceData, txData, settingsData] = await Promise.all([
+      const [balanceData, txData, settingsData, mintsData] = await Promise.all([
         chrome.runtime.sendMessage({ type: 'GET_BALANCE' }),
         chrome.runtime.sendMessage({ type: 'GET_TRANSACTIONS', limit: 5 }),
         chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }),
+        chrome.runtime.sendMessage({ type: 'GET_MINTS' }),
       ]);
       setBalances(balanceData || []);
       setTransactions(txData || []);
       setSettings(settingsData || DEFAULT_SETTINGS);
+      setMints(mintsData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -271,6 +326,18 @@ function Popup() {
     );
   }
 
+  // Transaction History view
+  if (view === 'history') {
+    return (
+      <div style={styles.container}>
+        <TransactionHistory
+          displayFormat={settings.displayFormat}
+          onBack={() => setView('main')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -296,7 +363,14 @@ function Popup() {
         >
           Receive
         </button>
-        <button style={{ ...styles.actionBtn, ...styles.sendBtn }} disabled>
+        <button
+          style={{
+            ...styles.actionBtn,
+            ...(totalBalance > 0 ? styles.sendBtnEnabled : styles.sendBtn),
+          }}
+          onClick={() => setShowSend(true)}
+          disabled={totalBalance === 0}
+        >
           Send
         </button>
       </div>
@@ -306,7 +380,17 @@ function Popup() {
           <div style={styles.sectionTitle}>Mints</div>
           <div style={styles.mintsList}>
             {balances.map((b) => (
-              <div key={b.mintUrl} style={styles.mintItem}>
+              <div
+                key={b.mintUrl}
+                style={styles.mintItem}
+                onClick={() => setSelectedMintInfo({ url: b.mintUrl, name: b.mintName })}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#303050';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#252542';
+                }}
+              >
                 <span style={styles.mintName}>{b.mintName}</span>
                 <span style={styles.mintBalance}>
                   {formatAmount(b.balance, settings.displayFormat)}
@@ -322,56 +406,133 @@ function Popup() {
         {transactions.length === 0 ? (
           <div style={styles.empty}>No transactions yet</div>
         ) : (
-          <div style={styles.txList}>
-            {transactions.map((tx) => (
-              <div key={tx.id} style={styles.txItem}>
-                <div style={styles.txInfo}>
-                  <span style={styles.txOrigin}>
-                    {tx.type === 'payment'
-                      ? getOriginHost(tx.origin)
-                      : 'Received'}
+          <>
+            <div style={styles.txList}>
+              {transactions.map((tx) => (
+                <div key={tx.id} style={styles.txItem}>
+                  <div style={styles.txInfo}>
+                    <span style={styles.txOrigin}>
+                      {tx.type === 'payment'
+                        ? getOriginHost(tx.origin)
+                        : 'Received'}
+                    </span>
+                    <span style={styles.txTime}>{formatTime(tx.timestamp)}</span>
+                  </div>
+                  <span
+                    style={{
+                      ...styles.txAmount,
+                      ...(tx.type === 'payment' ? styles.txPayment : styles.txReceive),
+                    }}
+                  >
+                    {formatTransactionAmount(tx.amount, tx.type, settings.displayFormat)}
                   </span>
-                  <span style={styles.txTime}>{formatTime(tx.timestamp)}</span>
                 </div>
-                <span
-                  style={{
-                    ...styles.txAmount,
-                    ...(tx.type === 'payment' ? styles.txPayment : styles.txReceive),
-                  }}
-                >
-                  {formatTransactionAmount(tx.amount, tx.type, settings.displayFormat)}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            <div
+              style={styles.viewAllLink}
+              onClick={() => setView('history')}
+            >
+              View All Transactions →
+            </div>
+          </>
         )}
       </div>
 
       {showReceive && (
         <div style={styles.modal}>
           <div style={styles.modalContent}>
-            <div style={styles.modalTitle}>Receive Token</div>
-            <textarea
-              style={{ ...styles.input, minHeight: '80px', resize: 'vertical' }}
-              placeholder="Paste Cashu token here..."
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-            />
-            <div style={styles.modalActions}>
+            <div style={styles.modalTitle}>Receive</div>
+
+            <div style={styles.tabs}>
               <button
-                style={{ ...styles.actionBtn, ...styles.sendBtn }}
-                onClick={() => setShowReceive(false)}
+                style={{ ...styles.tab, ...(receiveTab === 'ecash' ? styles.activeTab : {}) }}
+                onClick={() => setReceiveTab('ecash')}
               >
-                Cancel
+                Ecash
               </button>
               <button
-                style={{ ...styles.actionBtn, ...styles.receiveBtn }}
-                onClick={handleReceive}
-                disabled={receiving || !tokenInput.trim()}
+                style={{ ...styles.tab, ...(receiveTab === 'lightning' ? styles.activeTab : {}) }}
+                onClick={() => setReceiveTab('lightning')}
               >
-                {receiving ? 'Receiving...' : 'Receive'}
+                Lightning
               </button>
             </div>
+
+            {receiveTab === 'ecash' ? (
+              <>
+                <textarea
+                  style={{ ...styles.input, minHeight: '80px', resize: 'vertical' }}
+                  placeholder="Paste Cashu token here..."
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                />
+                <div style={styles.modalActions}>
+                  <button
+                    style={{ ...styles.actionBtn, ...styles.sendBtn }}
+                    onClick={() => {
+                      setShowReceive(false);
+                      setTokenInput('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    style={{ ...styles.actionBtn, ...styles.receiveBtn }}
+                    onClick={handleReceive}
+                    disabled={receiving || !tokenInput.trim()}
+                  >
+                    {receiving ? 'Receiving...' : 'Receive'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <LightningReceive
+                mints={mints}
+                displayFormat={settings.displayFormat}
+                onSuccess={() => {
+                  setShowReceive(false);
+                  loadData();
+                }}
+                onClose={() => setShowReceive(false)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {showSend && (
+        <div style={styles.modal}>
+          <div style={styles.modalContent}>
+            <div style={styles.modalTitle}>Send</div>
+            <SendModal
+              mints={mints}
+              balances={new Map(balances.map((b) => [b.mintUrl, b.balance]))}
+              displayFormat={settings.displayFormat}
+              onSuccess={() => {
+                setShowSend(false);
+                loadData();
+              }}
+              onClose={() => setShowSend(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {selectedMintInfo && (
+        <div style={styles.modal}>
+          <div style={styles.modalContent}>
+            <div style={styles.modalTitle}>Mint Details</div>
+            <MintInfoModal
+              mintUrl={selectedMintInfo.url}
+              mintName={selectedMintInfo.name}
+              displayFormat={settings.displayFormat}
+              onClose={() => setSelectedMintInfo(null)}
+              onConsolidate={async () => {
+                setSelectedMintInfo(null);
+                loadData();
+              }}
+            />
           </div>
         </div>
       )}
