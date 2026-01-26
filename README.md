@@ -42,7 +42,7 @@ Traditional web payments have high friction: credit card forms, account creation
 
 1. Clone and build:
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/babdbtc/nutpay
    cd nutpay
    npm install
    npm run build
