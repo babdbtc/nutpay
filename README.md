@@ -57,9 +57,12 @@ Traditional web payments have high friction: credit card forms, account creation
 ### Initial Setup
 
 1. Click the Nutpay extension icon
-2. Go to Settings (gear icon)
-3. Add a mint (e.g., `https://mint.minibits.cash/Bitcoin`)
-4. Deposit tokens by pasting a Cashu token string
+2. Choose **Create New Wallet** or **Import Existing Wallet**
+   - **Create New Wallet**: Generates a 12-word BIP39 seed phrase - write it down safely!
+   - **Import Existing Wallet**: Enter your existing seed phrase to restore your wallet
+3. Set a PIN or password to protect your wallet
+4. Go to Settings (gear icon) to add mints or customize preferences
+5. Deposit tokens via Lightning or by pasting a Cashu token
 
 ## Usage
 
@@ -74,6 +77,24 @@ Once configured with funds, Nutpay works automatically:
 ### Auto-Approve
 
 For trusted sites, check "Auto-approve future payments from this site" to skip the approval popup for future payments.
+
+### Wallet Backup & Recovery
+
+Nutpay uses **BIP39 seed phrases** (12 words) for wallet backup, compatible with the [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) deterministic secrets specification.
+
+**Backup your seed phrase:**
+1. Go to Settings → Security
+2. View your 12-word recovery phrase
+3. Write it down and store it safely offline
+
+**Restore your wallet:**
+1. Reinstall Nutpay or use on a new device
+2. Select "Import Existing Wallet"
+3. Enter your 12-word seed phrase
+4. Select mints to scan for recoverable funds
+5. Nutpay will scan and restore your ecash balance
+
+> **Important**: Your seed phrase controls your funds. Anyone with access to it can restore and spend your ecash. Never share it or store it digitally.
 
 ---
 
@@ -254,21 +275,26 @@ Nutpay comes pre-configured with these mints:
 
 - `https://mint.minibits.cash/Bitcoin` (Minibits)
 - `https://mint.coinos.io` (Coinos)
+- `https://mint.lnvoltz.com` (LNVoltz)
 
-Users can add custom mints in the extension settings.
+Users can add custom mints in the extension settings. During wallet recovery, these default mints are scanned for recoverable funds.
 
 ## Technical Details
 
 - **Manifest V3** - Built for modern Chrome extension standards
-- **Encrypted storage** - Proofs encrypted with AES-GCM before storing
+- **NUT-13 Deterministic Secrets** - BIP39 seed-based wallet recovery
+- **Encrypted storage** - Proofs and seed encrypted with AES-GCM
 - **Proof selection** - Optimizes for minimal change using subset-sum algorithm
+- **Counter persistence** - Keyset counters tracked for deterministic proof derivation
 - **Auto-cleanup** - Expired pending payments cleaned automatically
 
 ## Credits
 
 This extension implements the [X-Cashu](https://github.com/cashubtc/xcashu) protocol created by [Cashu](https://github.com/cashubtc). X-Cashu enables HTTP 402 Payment Required flows using Cashu ecash tokens.
 
-Built with [cashu-ts](https://github.com/cashubtc/cashu-ts), the TypeScript implementation of the Cashu protocol.
+Wallet recovery uses [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) deterministic secrets for seed-based backup and restore.
+
+Built with [cashu-ts](https://github.com/cashubtc/cashu-ts) v3, the TypeScript implementation of the Cashu protocol.
 
 Learn more about Cashu at [cashu.space](https://cashu.space).
 
