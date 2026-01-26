@@ -179,7 +179,7 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
 
       {/* Summary */}
       {transactions.length > 0 && (
-        <Card className="bg-[#252542] border-0">
+        <Card className="bg-card border-0">
           <CardContent className="p-3 flex gap-4">
             <div className="flex-1 text-center">
               <p className="text-[11px] text-muted-foreground mb-1">Total Received</p>
@@ -214,7 +214,7 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
             {transactions.map((tx) => (
               <Card
                 key={tx.id}
-                className="bg-[#252542] border-0 cursor-pointer hover:bg-[#303050] transition-colors"
+                className="bg-card border-0 cursor-pointer hover:bg-muted transition-colors"
                 onClick={() => setExpandedTx(expandedTx === tx.id ? null : tx.id)}
               >
                 <CardContent className="p-3">
@@ -267,7 +267,7 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
                           <p className="text-[11px] text-muted-foreground">
                             Ecash Token (for recovery):
                           </p>
-                          <div className="bg-[#1a1a2e] rounded p-2 text-[10px] text-muted-foreground break-all max-h-[60px] overflow-y-auto">
+                          <div className="bg-popover rounded p-2 text-[10px] text-muted-foreground break-all max-h-[60px] overflow-y-auto">
                             {tx.token}
                           </div>
                           <Button

@@ -1,4 +1,4 @@
-import type { MintConfig, Settings } from './types';
+import type { MintConfig, Settings, ThemeId } from './types';
 
 // Preset mints that users can easily add
 export const PRESET_MINTS: MintConfig[] = [
@@ -28,7 +28,59 @@ export const DEFAULT_SETTINGS: Settings = {
   preferredWallet: 'builtin',
   autoDiscoverMints: true,
   displayFormat: 'symbol', // Default to ₿ symbol
+  theme: 'classic',
 };
+
+// Theme definitions
+export interface ThemeDefinition {
+  id: ThemeId;
+  name: string;
+  description: string;
+  preview: {
+    bg: string;
+    card: string;
+    accent: string;
+  };
+}
+
+export const THEMES: ThemeDefinition[] = [
+  {
+    id: 'classic',
+    name: 'Classic',
+    description: 'Original purple with orange accent',
+    preview: { bg: '#16162a', card: '#252542', accent: '#f97316' },
+  },
+  {
+    id: 'violet',
+    name: 'Violet',
+    description: 'Deep purple night theme',
+    preview: { bg: '#16162a', card: '#252542', accent: '#a855f7' },
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    description: 'Pure black OLED theme',
+    preview: { bg: '#000000', card: '#111111', accent: '#ffffff' },
+  },
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    description: 'Deep sea blue theme',
+    preview: { bg: '#0a1929', card: '#132f4c', accent: '#5090d3' },
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    description: 'Dark green nature theme',
+    preview: { bg: '#0d1f0d', card: '#1a331a', accent: '#4ade80' },
+  },
+  {
+    id: 'bitcoin',
+    name: 'Bitcoin',
+    description: 'Orange bitcoin theme',
+    preview: { bg: '#1a1307', card: '#2d2210', accent: '#f7931a' },
+  },
+];
 
 // Storage keys
 export const STORAGE_KEYS = {

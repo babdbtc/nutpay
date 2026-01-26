@@ -173,9 +173,9 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
           Token generated! Share it with the recipient.
         </div>
 
-        <div className="flex flex-col items-center gap-3 p-4 bg-[#252542] rounded-xl">
+        <div className="flex flex-col items-center gap-3 p-4 bg-card rounded-xl">
           <QRCode value={generatedToken} size={180} />
-          <div className="text-[10px] text-muted-foreground break-all max-h-[80px] overflow-auto p-2 bg-[#1a1a2e] rounded-md w-full">
+          <div className="text-[10px] text-muted-foreground break-all max-h-[80px] overflow-auto p-2 bg-popover rounded-md w-full">
             {generatedToken}
           </div>
           <Button variant="secondary" size="sm" onClick={copyToClipboard}>
@@ -205,7 +205,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   if (meltQuote) {
     return (
       <div className="flex flex-col gap-4">
-        <Card className="bg-[#252542] border-0">
+        <Card className="bg-card border-0">
           <CardContent className="p-4 space-y-2">
             <div className="flex justify-between py-2 border-b border-[#333]">
               <span className="text-muted-foreground text-sm">Invoice Amount</span>
@@ -246,7 +246,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
 
   return (
     <Tabs defaultValue="ecash" className="w-full" onValueChange={handleTabChange}>
-      <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+      <TabsList className="grid w-full grid-cols-2 bg-card">
         <TabsTrigger value="ecash">Ecash</TabsTrigger>
         <TabsTrigger value="lightning">Lightning</TabsTrigger>
       </TabsList>
@@ -255,10 +255,10 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
         <div className="space-y-2">
           <Label className="text-muted-foreground">From Mint</Label>
           <Select value={selectedMint} onValueChange={setSelectedMint}>
-            <SelectTrigger className="bg-[#252542] border-[#374151]">
+            <SelectTrigger className="bg-card border-input">
               <SelectValue placeholder="Select a mint" />
             </SelectTrigger>
-            <SelectContent className="bg-[#252542] border-[#374151]">
+            <SelectContent className="bg-card border-input">
               {enabledMints.map((mint) => (
                 <SelectItem key={mint.url} value={mint.url}>
                   {mint.name} ({formatAmount(balances.get(mint.url) || 0, displayFormat)})
@@ -281,7 +281,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
               onChange={(e) => setAmount(e.target.value)}
               min="1"
               max={selectedBalance}
-              className="bg-[#252542] border-[#374151]"
+              className="bg-card border-input"
             />
           </div>
 
@@ -304,7 +304,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
               placeholder="Paste Lightning invoice (lnbc...)"
               value={invoice}
               onChange={(e) => setInvoice(e.target.value)}
-              className="bg-[#252542] border-[#374151] min-h-[80px]"
+              className="bg-card border-input min-h-[80px]"
             />
           </div>
 

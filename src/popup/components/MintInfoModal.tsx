@@ -119,7 +119,7 @@ export function MintInfoModal({
       <p className="text-[11px] text-muted-foreground break-all">{mintUrl}</p>
 
       {/* Balance Section */}
-      <Card className="bg-[#252542] border-0">
+      <Card className="bg-card border-0">
         <CardContent className="p-4">
           <p className="text-xs text-muted-foreground mb-2">Balance</p>
           <p className="text-2xl font-bold text-primary text-center py-2">
@@ -136,7 +136,7 @@ export function MintInfoModal({
 
       {/* Denominations */}
       {sortedDenoms.length > 0 && (
-        <Card className="bg-[#252542] border-0">
+        <Card className="bg-card border-0">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground mb-3">Denominations</p>
             <div className="flex flex-wrap gap-1.5">
@@ -144,7 +144,7 @@ export function MintInfoModal({
                 <Badge
                   key={denom}
                   variant="secondary"
-                  className="bg-[#1a1a2e] text-muted-foreground text-[11px] font-normal"
+                  className="bg-popover text-muted-foreground text-[11px] font-normal"
                 >
                   {denom} x{count}
                 </Badge>
@@ -156,7 +156,7 @@ export function MintInfoModal({
 
       {/* Mint Info */}
       {mintInfo && (
-        <Card className="bg-[#252542] border-0">
+        <Card className="bg-card border-0">
           <CardContent className="p-4 space-y-2">
             <p className="text-xs text-muted-foreground mb-2">Mint Info</p>
             {mintInfo.version && (
@@ -172,7 +172,7 @@ export function MintInfoModal({
               </span>
             </div>
             {mintInfo.motd && (
-              <p className="text-xs text-muted-foreground italic p-2 bg-[#1a1a2e] rounded-md mt-2">
+              <p className="text-xs text-muted-foreground italic p-2 bg-popover rounded-md mt-2">
                 {mintInfo.motd}
               </p>
             )}

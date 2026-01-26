@@ -99,9 +99,9 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
   // Step 1: Enter recovery phrase
   if (step === 'phrase') {
     return (
-      <div className="popup-container bg-[#16162a] p-6 flex flex-col gap-4">
+      <div className="popup-container bg-background p-6 flex flex-col gap-4">
         <div className="flex flex-col items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-full bg-[#252542] flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-card flex items-center justify-center">
             <KeyRound className="h-6 w-6 text-primary" />
           </div>
           <h2 className="text-lg font-semibold text-white">Recovery</h2>
@@ -116,7 +116,7 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
             placeholder="Enter your 12 words separated by spaces..."
             value={recoveryPhrase}
             onChange={(e) => setRecoveryPhrase(e.target.value)}
-            className="bg-[#252542] border-[#374151] min-h-[100px]"
+            className="bg-card border-input min-h-[100px]"
           />
         </div>
 
@@ -140,7 +140,7 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
   // Step 2: Set new credential
   return (
-    <div className="popup-container bg-[#16162a] p-6 flex flex-col gap-4">
+    <div className="popup-container bg-background p-6 flex flex-col gap-4">
       <div className="text-center mb-2">
         <h2 className="text-lg font-semibold text-white">Set New {authType === 'pin' ? 'PIN' : 'Password'}</h2>
         <p className="text-sm text-muted-foreground mt-1">
@@ -149,19 +149,19 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
       </div>
 
       <Tabs value={authType} onValueChange={(v) => setAuthType(v as 'pin' | 'password')} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+        <TabsList className="grid w-full grid-cols-2 bg-card">
           <TabsTrigger value="pin">PIN</TabsTrigger>
           <TabsTrigger value="password">Password</TabsTrigger>
         </TabsList>
         <TabsContent value="pin" className="mt-4">
-          <Card className="bg-[#252542] border-0">
+          <Card className="bg-card border-0">
             <CardContent className="p-3 text-center">
               <p className="text-xs text-muted-foreground">4-6 digit numeric code</p>
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="password" className="mt-4">
-          <Card className="bg-[#252542] border-0">
+          <Card className="bg-card border-0">
             <CardContent className="p-3 text-center">
               <p className="text-xs text-muted-foreground">Alphanumeric, min 6 characters</p>
             </CardContent>
@@ -181,7 +181,7 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
               value={credential}
               onChange={(e) => setCredential(e.target.value)}
               maxLength={authType === 'pin' ? 6 : 50}
-              className="bg-[#252542] border-[#374151] pr-10"
+              className="bg-card border-input pr-10"
               autoComplete="new-password"
             />
             <button
@@ -204,7 +204,7 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
             value={confirmCredential}
             onChange={(e) => setConfirmCredential(e.target.value)}
             maxLength={authType === 'pin' ? 6 : 50}
-            className="bg-[#252542] border-[#374151]"
+            className="bg-card border-input"
             autoComplete="new-password"
           />
         </div>

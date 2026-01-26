@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { MintBalance, Transaction, Settings, MintConfig } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount, formatTransactionAmount } from '../shared/format';
+import { applyTheme } from '../shared/theme';
 import { LightningReceive } from './components/LightningReceive';
 import { SendModal } from './components/SendModal';
 import { MintInfoModal } from './components/MintInfoModal';
@@ -83,8 +84,11 @@ function Popup() {
       ]);
       setBalances(balanceData || []);
       setTransactions(txData || []);
-      setSettings(settingsData || DEFAULT_SETTINGS);
+      const loadedSettings = settingsData || DEFAULT_SETTINGS;
+      setSettings(loadedSettings);
       setMints(mintsData || []);
+      // Apply theme
+      applyTheme(loadedSettings.theme || 'classic');
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -167,7 +171,7 @@ function Popup() {
   // Auth checking state
   if (authState === 'checking') {
     return (
-      <div className="popup-container flex items-center justify-center bg-[#16162a]">
+      <div className="popup-container flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -176,7 +180,7 @@ function Popup() {
   // Security setup screen
   if (authState === 'setup') {
     return (
-      <div className="popup-container bg-[#16162a]">
+      <div className="popup-container bg-background">
         <SecuritySetup
           onComplete={() => setAuthState('unlocked')}
           onSkip={() => setAuthState('unlocked')}
@@ -209,7 +213,7 @@ function Popup() {
   // Main app loading state
   if (loading) {
     return (
-      <div className="popup-container flex items-center justify-center bg-[#16162a]">
+      <div className="popup-container flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -218,7 +222,7 @@ function Popup() {
   // Transaction History view
   if (view === 'history') {
     return (
-      <div className="popup-container bg-[#16162a] p-4">
+      <div className="popup-container bg-background p-4">
         <TransactionHistory
           displayFormat={settings.displayFormat}
           onBack={() => setView('main')}
@@ -228,7 +232,7 @@ function Popup() {
   }
 
   return (
-    <div className="popup-container bg-[#16162a] p-4 flex flex-col gap-4">
+    <div className="popup-container bg-background p-4 flex flex-col gap-4">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-primary">Nutpay</h1>
@@ -238,7 +242,7 @@ function Popup() {
       </div>
 
       {/* Balance Card */}
-      <Card className="bg-gradient-to-br from-[#252542] to-[#1e1e35] border-0">
+      <Card className="bg-card border-0">
         <CardContent className="p-6 text-center">
           <p className="text-sm text-muted-foreground mb-2">Total Balance</p>
           <p className="text-4xl font-bold text-white">
@@ -275,7 +279,7 @@ function Popup() {
             {balances.map((b) => (
               <Card
                 key={b.mintUrl}
-                className="bg-[#252542] border-0 cursor-pointer hover:bg-[#303050] transition-colors"
+                className="bg-card border-0 cursor-pointer hover:bg-muted transition-colors"
                 onClick={() => setSelectedMintInfo({ url: b.mintUrl, name: b.mintName })}
               >
                 <CardContent className="p-3 flex justify-between items-center">
@@ -300,7 +304,7 @@ function Popup() {
             <ScrollArea className="h-[140px]">
               <div className="flex flex-col gap-2">
                 {transactions.map((tx) => (
-                  <Card key={tx.id} className="bg-[#252542] border-0">
+                  <Card key={tx.id} className="bg-card border-0">
                     <CardContent className="p-3 flex justify-between items-center">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-white">
@@ -328,12 +332,12 @@ function Popup() {
 
       {/* Receive Modal */}
       <Dialog open={showReceive} onOpenChange={setShowReceive}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-[340px] max-h-[440px] overflow-y-auto">
+        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[440px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-center">Receive</DialogTitle>
           </DialogHeader>
           <Tabs defaultValue="ecash" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+            <TabsList className="grid w-full grid-cols-2 bg-card">
               <TabsTrigger value="ecash">Ecash</TabsTrigger>
               <TabsTrigger value="lightning">Lightning</TabsTrigger>
             </TabsList>
@@ -342,7 +346,7 @@ function Popup() {
                 placeholder="Paste Cashu token here..."
                 value={tokenInput}
                 onChange={(e) => setTokenInput(e.target.value)}
-                className="bg-[#252542] border-[#374151] min-h-[100px] text-white"
+                className="bg-card border-input min-h-[100px] text-white"
               />
               <div className="flex gap-3 mt-4">
                 <Button
@@ -384,7 +388,7 @@ function Popup() {
 
       {/* Send Modal */}
       <Dialog open={showSend} onOpenChange={setShowSend}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-[340px] max-h-[440px] overflow-y-auto">
+        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[440px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-center">Send</DialogTitle>
           </DialogHeader>
@@ -403,7 +407,7 @@ function Popup() {
 
       {/* Mint Info Modal */}
       <Dialog open={!!selectedMintInfo} onOpenChange={() => setSelectedMintInfo(null)}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-[340px] max-h-[440px] overflow-y-auto">
+        <DialogContent className="bg-popover border-border max-w-[340px] max-h-[440px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-center">Mint Details</DialogTitle>
           </DialogHeader>

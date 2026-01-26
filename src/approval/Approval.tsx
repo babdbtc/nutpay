@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
+import { applyTheme } from '../shared/theme';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -35,7 +36,10 @@ function Approval() {
     });
 
     chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }).then((data) => {
-      if (data) setSettings(data);
+      if (data) {
+        setSettings(data);
+        applyTheme(data.theme || 'classic');
+      }
     });
   }, []);
 
@@ -90,7 +94,7 @@ function Approval() {
 
   if (!details) {
     return (
-      <div className="approval-container bg-[#16162a] min-h-screen flex items-center justify-center text-muted-foreground">
+      <div className="approval-container bg-background min-h-screen flex items-center justify-center text-muted-foreground">
         Loading...
       </div>
     );
@@ -115,7 +119,7 @@ function Approval() {
   const remainingBalance = details.balance - details.amount;
 
   return (
-    <div className="approval-container bg-[#16162a] min-h-screen text-white flex flex-col gap-4">
+    <div className="approval-container bg-background min-h-screen text-white flex flex-col gap-4">
       {/* Header */}
       <div className="text-center mb-2">
         <h1 className="text-lg font-semibold mb-1">Payment Request</h1>
@@ -123,7 +127,7 @@ function Approval() {
       </div>
 
       {/* Payment Details Card */}
-      <Card className="bg-[#252542] border-0">
+      <Card className="bg-card border-0">
         <CardContent className="p-4">
           {/* Amount */}
           <p className="text-3xl font-bold text-primary text-center py-4">
