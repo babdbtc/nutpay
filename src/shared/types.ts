@@ -119,12 +119,16 @@ export interface AllowlistEntry {
   lastResetDate: string;
 }
 
+// Available themes
+export type ThemeId = 'classic' | 'violet' | 'midnight' | 'ocean' | 'forest' | 'bitcoin';
+
 // Extension settings
 export interface Settings {
   alwaysAsk: boolean;
   preferredWallet: 'builtin' | 'nwc' | 'nip60';
   autoDiscoverMints: boolean;
   displayFormat: 'symbol' | 'text'; // 'symbol' = ₿10, 'text' = 10 sats
+  theme: ThemeId;
   nwcConnectionString?: string;
   nip60Pubkey?: string;
 }

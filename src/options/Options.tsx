@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { Settings, MintConfig, AllowlistEntry } from '../shared/types';
-import { PRESET_MINTS, DEFAULT_SETTINGS } from '../shared/constants';
+import type { Settings, MintConfig, AllowlistEntry, ThemeId } from '../shared/types';
+import { PRESET_MINTS, DEFAULT_SETTINGS, THEMES } from '../shared/constants';
 import { formatAmount } from '../shared/format';
+import { applyTheme } from '../shared/theme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,13 +75,16 @@ function Options() {
         chrome.runtime.sendMessage({ type: 'GET_ALLOWLIST' }),
         chrome.runtime.sendMessage({ type: 'GET_SECURITY_CONFIG' }),
       ]);
-      setSettings(settingsData || DEFAULT_SETTINGS);
+      const loadedSettings = settingsData || DEFAULT_SETTINGS;
+      setSettings(loadedSettings);
       setMints(mintsData || PRESET_MINTS);
       setAllowlist(allowlistData || []);
       if (securityData) {
         setSecurityEnabled(securityData.enabled || false);
         setSecurityType(securityData.type || 'pin');
       }
+      // Apply theme
+      applyTheme(loadedSettings.theme || 'classic');
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -95,6 +99,10 @@ function Options() {
       type: 'UPDATE_SETTINGS',
       settings: { [key]: value },
     });
+    // Apply theme immediately when changed
+    if (key === 'theme') {
+      applyTheme(value as ThemeId);
+    }
   };
 
   const toggleMint = async (url: string, enabled: boolean) => {
@@ -413,14 +421,14 @@ function Options() {
 
   if (loading) {
     return (
-      <div className="options-container bg-[#16162a] min-h-screen flex items-center justify-center">
+      <div className="options-container bg-background min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="options-container bg-[#16162a] min-h-screen text-white">
+    <div className="options-container bg-background min-h-screen text-white">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-primary mb-2">Nutpay Settings</h1>
@@ -430,7 +438,7 @@ function Options() {
       </div>
 
       {/* General Settings */}
-      <Card className="bg-[#252542] border-0 mb-6">
+      <Card className="bg-card border-0 mb-6">
         <CardHeader>
           <CardTitle className="text-lg">General</CardTitle>
         </CardHeader>
@@ -448,7 +456,7 @@ function Options() {
             />
           </div>
 
-          <Separator className="bg-[#333]" />
+          <Separator className="bg-border" />
 
           <div className="flex items-center justify-between py-2">
             <div className="space-y-1">
@@ -463,7 +471,7 @@ function Options() {
             />
           </div>
 
-          <Separator className="bg-[#333]" />
+          <Separator className="bg-border" />
 
           <div className="flex items-center justify-between py-2">
             <div className="space-y-1">
@@ -476,17 +484,57 @@ function Options() {
               value={settings.displayFormat}
               onValueChange={(v) => updateSetting('displayFormat', v as Settings['displayFormat'])}
             >
-              <SelectTrigger className="w-32 bg-[#1a1a2e] border-[#374151]">
+              <SelectTrigger className="w-32 bg-popover border-input">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#252542] border-[#374151]">
+              <SelectContent className="bg-card border-input">
                 <SelectItem value="symbol"> Symbol</SelectItem>
                 <SelectItem value="text">sats</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <Separator className="bg-[#333]" />
+          <Separator className="bg-border" />
+
+          <div className="py-2">
+            <div className="space-y-1 mb-3">
+              <Label className="text-sm font-medium">Theme</Label>
+              <p className="text-xs text-muted-foreground">
+                Choose your preferred color scheme
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {THEMES.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => updateSetting('theme', theme.id)}
+                  className={`p-3 rounded-lg border-2 transition-all ${
+                    settings.theme === theme.id
+                      ? 'border-primary'
+                      : 'border-transparent hover:border-muted-foreground/30'
+                  }`}
+                  style={{ backgroundColor: theme.preview.bg }}
+                >
+                  <div className="flex flex-col gap-1.5">
+                    <div
+                      className="h-8 rounded"
+                      style={{ backgroundColor: theme.preview.card }}
+                    >
+                      <div
+                        className="h-2 w-8 rounded-full mt-3 ml-2"
+                        style={{ backgroundColor: theme.preview.accent }}
+                      />
+                    </div>
+                    <span className="text-xs font-medium" style={{ color: theme.preview.accent }}>
+                      {theme.name}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="bg-border" />
 
           <div className="flex items-center justify-between py-2">
             <div className="space-y-1">
@@ -499,10 +547,10 @@ function Options() {
               value={settings.preferredWallet}
               onValueChange={(v) => updateSetting('preferredWallet', v as Settings['preferredWallet'])}
             >
-              <SelectTrigger className="w-40 bg-[#1a1a2e] border-[#374151]">
+              <SelectTrigger className="w-40 bg-popover border-input">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#252542] border-[#374151]">
+              <SelectContent className="bg-card border-input">
                 <SelectItem value="builtin">Built-in wallet</SelectItem>
                 <SelectItem value="nwc">Nostr Wallet Connect</SelectItem>
                 <SelectItem value="nip60">NIP-60 Wallet</SelectItem>
@@ -516,7 +564,7 @@ function Options() {
                 placeholder="NWC connection string (nostr+walletconnect://...)"
                 value={settings.nwcConnectionString || ''}
                 onChange={(e) => updateSetting('nwcConnectionString', e.target.value)}
-                className="bg-[#1a1a2e] border-[#374151]"
+                className="bg-popover border-input"
               />
             </div>
           )}
@@ -524,7 +572,7 @@ function Options() {
       </Card>
 
       {/* Security */}
-      <Card className="bg-[#252542] border-0 mb-6">
+      <Card className="bg-card border-0 mb-6">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Shield className="h-5 w-5" />
@@ -546,7 +594,7 @@ function Options() {
             </Badge>
           </div>
 
-          <Separator className="bg-[#333]" />
+          <Separator className="bg-border" />
 
           {securityEnabled ? (
             <div className="space-y-3">
@@ -603,7 +651,7 @@ function Options() {
       </Card>
 
       {/* Mints */}
-      <Card className="bg-[#252542] border-0 mb-6">
+      <Card className="bg-card border-0 mb-6">
         <CardHeader>
           <CardTitle className="text-lg">Mints</CardTitle>
         </CardHeader>
@@ -611,7 +659,7 @@ function Options() {
           {mints.map((mint) => (
             <div
               key={mint.url}
-              className="flex items-center justify-between p-3 bg-[#1a1a2e] rounded-lg"
+              className="flex items-center justify-between p-3 bg-popover rounded-lg"
             >
               <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                 <span className="text-sm font-medium">{mint.name}</span>
@@ -647,7 +695,7 @@ function Options() {
               placeholder="Add mint URL..."
               value={newMintUrl}
               onChange={(e) => setNewMintUrl(e.target.value)}
-              className="bg-[#1a1a2e] border-[#374151] flex-1"
+              className="bg-popover border-input flex-1"
             />
             <Button
               className="bg-green-500 hover:bg-green-600"
@@ -660,7 +708,7 @@ function Options() {
       </Card>
 
       {/* Allowed Sites */}
-      <Card className="bg-[#252542] border-0">
+      <Card className="bg-card border-0">
         <CardHeader>
           <CardTitle className="text-lg">Allowed Sites</CardTitle>
         </CardHeader>
@@ -674,7 +722,7 @@ function Options() {
             <div className="space-y-3">
               {allowlist.map((entry) => (
                 <div key={entry.origin}>
-                  <div className="flex items-center justify-between p-3 bg-[#1a1a2e] rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-popover rounded-lg">
                     <div className="flex flex-col gap-1">
                       <span className="text-sm font-medium">
                         {new URL(entry.origin).hostname}
@@ -700,14 +748,14 @@ function Options() {
                   </div>
 
                   {editingEntry === entry.origin && (
-                    <div className="mt-2 p-3 bg-[#1a1a2e] rounded-lg space-y-3">
+                    <div className="mt-2 p-3 bg-popover rounded-lg space-y-3">
                       <div className="flex items-center gap-2">
                         <Label className="flex-1 text-xs text-muted-foreground">
                           Max per payment (sats)
                         </Label>
                         <Input
                           type="number"
-                          className="w-24 bg-[#252542] border-[#374151] text-right text-sm"
+                          className="w-24 bg-card border-input text-right text-sm"
                           value={editMaxPerPayment}
                           onChange={(e) => setEditMaxPerPayment(e.target.value)}
                           min="1"
@@ -719,7 +767,7 @@ function Options() {
                         </Label>
                         <Input
                           type="number"
-                          className="w-24 bg-[#252542] border-[#374151] text-right text-sm"
+                          className="w-24 bg-card border-input text-right text-sm"
                           value={editMaxPerDay}
                           onChange={(e) => setEditMaxPerDay(e.target.value)}
                           min="1"
@@ -763,7 +811,7 @@ function Options() {
         setShowSetupModal(open);
         if (!open) resetSetupModal();
       }}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-md">
+        <DialogContent className="bg-popover border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-center">
               {setupStep === 'create' ? 'Enable Security' : 'Recovery Phrase'}
@@ -773,19 +821,19 @@ function Options() {
           {setupStep === 'create' ? (
             <div className="space-y-4">
               <Tabs value={setupAuthType} onValueChange={(v) => setSetupAuthType(v as 'pin' | 'password')} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+                <TabsList className="grid w-full grid-cols-2 bg-card">
                   <TabsTrigger value="pin">PIN</TabsTrigger>
                   <TabsTrigger value="password">Password</TabsTrigger>
                 </TabsList>
                 <TabsContent value="pin" className="mt-4">
-                  <Card className="bg-[#252542] border-0">
+                  <Card className="bg-card border-0">
                     <CardContent className="p-3 text-center">
                       <p className="text-xs text-muted-foreground">4-6 digit numeric code</p>
                     </CardContent>
                   </Card>
                 </TabsContent>
                 <TabsContent value="password" className="mt-4">
-                  <Card className="bg-[#252542] border-0">
+                  <Card className="bg-card border-0">
                     <CardContent className="p-3 text-center">
                       <p className="text-xs text-muted-foreground">Alphanumeric, min 6 characters</p>
                     </CardContent>
@@ -804,7 +852,7 @@ function Options() {
                     value={setupCredential}
                     onChange={(e) => setSetupCredential(e.target.value)}
                     maxLength={setupAuthType === 'pin' ? 6 : 50}
-                    className="bg-[#252542] border-[#374151] pr-10"
+                    className="bg-card border-input pr-10"
                     autoComplete="new-password"
                   />
                   <button
@@ -827,7 +875,7 @@ function Options() {
                   value={setupConfirmCredential}
                   onChange={(e) => setSetupConfirmCredential(e.target.value)}
                   maxLength={setupAuthType === 'pin' ? 6 : 50}
-                  className="bg-[#252542] border-[#374151]"
+                  className="bg-card border-input"
                   autoComplete="new-password"
                 />
               </div>
@@ -854,11 +902,11 @@ function Options() {
                 Save this phrase to recover your wallet if you forget your {setupAuthType}
               </p>
 
-              <Card className="bg-[#252542] border-0">
+              <Card className="bg-card border-0">
                 <CardContent className="p-4">
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     {setupRecoveryPhrase.split(' ').map((word, i) => (
-                      <div key={i} className="bg-[#1a1a2e] rounded p-2 text-center">
+                      <div key={i} className="bg-popover rounded p-2 text-center">
                         <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
                         <span className="text-white">{word}</span>
                       </div>
@@ -914,7 +962,7 @@ function Options() {
         setShowChangeModal(open);
         if (!open) resetChangeModal();
       }}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-md">
+        <DialogContent className="bg-popover border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-center">Change {securityType === 'pin' ? 'PIN' : 'Password'}</DialogTitle>
           </DialogHeader>
@@ -931,7 +979,7 @@ function Options() {
                   value={changeCurrentCredential}
                   onChange={(e) => setChangeCurrentCredential(e.target.value)}
                   maxLength={securityType === 'pin' ? 6 : 50}
-                  className="bg-[#252542] border-[#374151] pr-10"
+                  className="bg-card border-input pr-10"
                   autoComplete="current-password"
                 />
                 <button
@@ -944,10 +992,10 @@ function Options() {
               </div>
             </div>
 
-            <Separator className="bg-[#333]" />
+            <Separator className="bg-border" />
 
             <Tabs value={changeNewAuthType} onValueChange={(v) => setChangeNewAuthType(v as 'pin' | 'password')} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+              <TabsList className="grid w-full grid-cols-2 bg-card">
                 <TabsTrigger value="pin">PIN</TabsTrigger>
                 <TabsTrigger value="password">Password</TabsTrigger>
               </TabsList>
@@ -963,7 +1011,7 @@ function Options() {
                 value={changeNewCredential}
                 onChange={(e) => setChangeNewCredential(e.target.value)}
                 maxLength={changeNewAuthType === 'pin' ? 6 : 50}
-                className="bg-[#252542] border-[#374151]"
+                className="bg-card border-input"
                 autoComplete="new-password"
               />
             </div>
@@ -978,7 +1026,7 @@ function Options() {
                 value={changeConfirmCredential}
                 onChange={(e) => setChangeConfirmCredential(e.target.value)}
                 maxLength={changeNewAuthType === 'pin' ? 6 : 50}
-                className="bg-[#252542] border-[#374151]"
+                className="bg-card border-input"
                 autoComplete="new-password"
               />
             </div>
@@ -1007,7 +1055,7 @@ function Options() {
         setShowRecoveryModal(open);
         if (!open) resetRecoveryModal();
       }}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-md">
+        <DialogContent className="bg-popover border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-center">Recovery Phrase</DialogTitle>
           </DialogHeader>
@@ -1029,7 +1077,7 @@ function Options() {
                     value={recoveryCredential}
                     onChange={(e) => setRecoveryCredential(e.target.value)}
                     maxLength={securityType === 'pin' ? 6 : 50}
-                    className="bg-[#252542] border-[#374151] pr-10"
+                    className="bg-card border-input pr-10"
                     autoComplete="current-password"
                   />
                   <button
@@ -1060,11 +1108,11 @@ function Options() {
             </div>
           ) : (
             <div className="space-y-4">
-              <Card className="bg-[#252542] border-0">
+              <Card className="bg-card border-0">
                 <CardContent className="p-4">
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     {recoveryPhrase.split(' ').map((word, i) => (
-                      <div key={i} className="bg-[#1a1a2e] rounded p-2 text-center">
+                      <div key={i} className="bg-popover rounded p-2 text-center">
                         <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
                         <span className="text-white">{word}</span>
                       </div>
@@ -1103,7 +1151,7 @@ function Options() {
         setShowDisableModal(open);
         if (!open) resetDisableModal();
       }}>
-        <DialogContent className="bg-[#1a1a2e] border-[#252542] max-w-md">
+        <DialogContent className="bg-popover border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-center">Disable Security</DialogTitle>
           </DialogHeader>
@@ -1125,7 +1173,7 @@ function Options() {
                   value={disableCredential}
                   onChange={(e) => setDisableCredential(e.target.value)}
                   maxLength={securityType === 'pin' ? 6 : 50}
-                  className="bg-[#252542] border-[#374151] pr-10"
+                  className="bg-card border-input pr-10"
                   autoComplete="current-password"
                 />
                 <button

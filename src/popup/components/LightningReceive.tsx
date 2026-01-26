@@ -152,9 +152,9 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
           {formatAmount(quote.amount, displayFormat)}
         </p>
 
-        <div className="flex flex-col items-center gap-3 p-4 bg-[#252542] rounded-xl">
+        <div className="flex flex-col items-center gap-3 p-4 bg-card rounded-xl">
           <QRCode value={quote.invoice} size={180} />
-          <div className="text-[10px] text-muted-foreground break-all max-h-[60px] overflow-auto p-2 bg-[#1a1a2e] rounded-md w-full">
+          <div className="text-[10px] text-muted-foreground break-all max-h-[60px] overflow-auto p-2 bg-popover rounded-md w-full">
             {quote.invoice}
           </div>
           <Button variant="secondary" size="sm" onClick={copyToClipboard}>
@@ -219,17 +219,17 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           min="1"
-          className="bg-[#252542] border-[#374151]"
+          className="bg-card border-input"
         />
       </div>
 
       <div className="space-y-2">
         <Label className="text-muted-foreground">Mint</Label>
         <Select value={selectedMint} onValueChange={setSelectedMint}>
-          <SelectTrigger className="bg-[#252542] border-[#374151]">
+          <SelectTrigger className="bg-card border-input">
             <SelectValue placeholder="Select a mint" />
           </SelectTrigger>
-          <SelectContent className="bg-[#252542] border-[#374151]">
+          <SelectContent className="bg-card border-input">
             {enabledMints.map((mint) => (
               <SelectItem key={mint.url} value={mint.url}>
                 {mint.name}

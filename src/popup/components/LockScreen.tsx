@@ -89,9 +89,9 @@ export function LockScreen({ authType, onUnlock, onForgot }: LockScreenProps) {
   const isLocked = lockoutRemaining > 0;
 
   return (
-    <div className="popup-container bg-[#16162a] p-6 flex flex-col items-center justify-center gap-6">
+    <div className="popup-container bg-background p-6 flex flex-col items-center justify-center gap-6">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-16 h-16 rounded-full bg-[#252542] flex items-center justify-center">
+        <div className="w-16 h-16 rounded-full bg-card flex items-center justify-center">
           <Lock className="h-8 w-8 text-primary" />
         </div>
         <h1 className="text-xl font-bold text-primary">Nutpay</h1>
@@ -113,7 +113,7 @@ export function LockScreen({ authType, onUnlock, onForgot }: LockScreenProps) {
               onChange={(e) => setCredential(e.target.value)}
               onKeyDown={handleKeyDown}
               maxLength={authType === 'pin' ? 6 : 50}
-              className="bg-[#252542] border-[#374151] pr-10"
+              className="bg-card border-input pr-10"
               autoComplete="current-password"
               autoFocus
               disabled={isLocked}

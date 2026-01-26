@@ -95,12 +95,12 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
         </div>
 
         <Tabs value={authType} onValueChange={(v) => setAuthType(v as 'pin' | 'password')} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-[#252542]">
+          <TabsList className="grid w-full grid-cols-2 bg-card">
             <TabsTrigger value="pin">PIN</TabsTrigger>
             <TabsTrigger value="password">Password</TabsTrigger>
           </TabsList>
           <TabsContent value="pin" className="mt-4">
-            <Card className="bg-[#252542] border-0">
+            <Card className="bg-card border-0">
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground">
                   4-6 digit numeric code. Quick to enter.
@@ -109,7 +109,7 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
             </Card>
           </TabsContent>
           <TabsContent value="password" className="mt-4">
-            <Card className="bg-[#252542] border-0">
+            <Card className="bg-card border-0">
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-muted-foreground">
                   Alphanumeric password. More secure.
@@ -155,7 +155,7 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
                 value={credential}
                 onChange={(e) => setCredential(e.target.value)}
                 maxLength={authType === 'pin' ? 6 : 50}
-                className="bg-[#252542] border-[#374151] pr-10"
+                className="bg-card border-input pr-10"
                 autoComplete="new-password"
               />
               <button
@@ -178,7 +178,7 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
               value={confirmCredential}
               onChange={(e) => setConfirmCredential(e.target.value)}
               maxLength={authType === 'pin' ? 6 : 50}
-              className="bg-[#252542] border-[#374151]"
+              className="bg-card border-input"
               autoComplete="new-password"
             />
           </div>
@@ -213,11 +213,11 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
           </p>
         </div>
 
-        <Card className="bg-[#252542] border-0">
+        <Card className="bg-card border-0">
           <CardContent className="p-4">
             <div className="grid grid-cols-3 gap-2 text-sm">
               {recoveryPhrase.split(' ').map((word, i) => (
-                <div key={i} className="bg-[#1a1a2e] rounded p-2 text-center">
+                <div key={i} className="bg-popover rounded p-2 text-center">
                   <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
                   <span className="text-white">{word}</span>
                 </div>
