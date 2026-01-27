@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2 } from 'lucide-react';
+import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock } from 'lucide-react';
 
 type View = 'main' | 'history';
 type AuthState = 'checking' | 'welcome' | 'setup' | 'import' | 'locked' | 'recovery' | 'unlocked';
@@ -38,6 +38,7 @@ function Popup() {
   const [tokenInput, setTokenInput] = useState('');
   const [receiving, setReceiving] = useState(false);
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const [securityEnabled, setSecurityEnabled] = useState(false);
 
   useEffect(() => {
     // Check for pending payment from URL params (opened by 402 request when locked)
@@ -54,6 +55,7 @@ function Popup() {
       const result = await chrome.runtime.sendMessage({ type: 'CHECK_SESSION' });
 
       if (!result.securityEnabled) {
+        setSecurityEnabled(false);
         // No security setup - check if this is a fresh install
         const hasBalance = await chrome.runtime.sendMessage({ type: 'GET_BALANCE' });
         const walletInfo = await chrome.runtime.sendMessage({ type: 'GET_WALLET_INFO' });
@@ -69,9 +71,11 @@ function Popup() {
           setAuthState('unlocked');
         }
       } else if (result.valid) {
+        setSecurityEnabled(true);
         setAuthType(result.authType);
         setAuthState('unlocked');
       } else {
+        setSecurityEnabled(true);
         setAuthType(result.authType);
         setAuthState('locked');
       }
@@ -138,6 +142,11 @@ function Popup() {
 
   const openOptions = () => {
     chrome.runtime.openOptionsPage();
+  };
+
+  const handleLock = async () => {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_SESSION' });
+    setAuthState('locked');
   };
 
   const formatTime = (timestamp: number) => {
@@ -283,9 +292,16 @@ function Popup() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-primary">Nutpay</h1>
-        <Button variant="ghost" size="icon" onClick={openOptions} className="text-muted-foreground hover:text-foreground">
-          <SettingsIcon className="h-5 w-5" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {securityEnabled && (
+            <Button variant="ghost" size="icon" onClick={handleLock} className="text-muted-foreground hover:text-foreground" title="Lock wallet">
+              <Lock className="h-5 w-5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" onClick={openOptions} className="text-muted-foreground hover:text-foreground" title="Settings">
+            <SettingsIcon className="h-5 w-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Balance Card */}

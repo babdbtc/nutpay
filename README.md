@@ -2,6 +2,10 @@
 
 A Chrome extension that enables automatic micropayments using Cashu ecash tokens. When a website returns an HTTP 402 (Payment Required) response with X-Cashu payment details, Nutpay prompts the user for approval, sends the payment, and automatically retries the request.
 
+## Demo
+
+https://github.com/babdbtc/nutpay/raw/main/nutpay-demo.mp4
+
 ## Why Nutpay?
 
 Traditional web payments have high friction: credit card forms, account creation, minimum amounts, and transaction fees that make micropayments impractical. Nutpay changes this by:
