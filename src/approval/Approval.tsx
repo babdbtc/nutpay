@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
@@ -8,6 +8,29 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+
+function AnimatedCheckmark() {
+  return (
+    <div className="relative flex items-center justify-center">
+      <div className="w-20 h-20 rounded-full bg-green-500/20 animate-circle-fill animate-success-pulse flex items-center justify-center">
+        <svg
+          className="w-10 h-10 text-green-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path
+            className="animate-checkmark-draw"
+            d="M4 12l6 6L20 6"
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 interface PaymentDetails {
   requestId: string;
@@ -23,6 +46,8 @@ function Approval() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [rememberSite, setRememberSite] = useState(false);
   const [timeLeft, setTimeLeft] = useState(60);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -37,17 +62,19 @@ function Approval() {
 
     chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }).then((data) => {
       if (data) {
-        setSettings(data);
-        applyTheme(data.theme || 'classic');
+        // Merge with defaults to ensure new settings fields have values
+        const merged = { ...DEFAULT_SETTINGS, ...data };
+        setSettings(merged);
+        applyTheme(merged.theme || 'classic');
       }
     });
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (timerRef.current) clearInterval(timerRef.current);
           handleDeny();
           return 0;
         }
@@ -55,11 +82,16 @@ function Approval() {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, []);
 
   const sendResponse = (approved: boolean) => {
     if (!details) return;
+
+    // Clear the auto-deny timer
+    if (timerRef.current) clearInterval(timerRef.current);
 
     chrome.runtime.sendMessage({
       type: 'APPROVAL_RESPONSE',
@@ -68,10 +100,16 @@ function Approval() {
       rememberSite,
     });
 
-    window.close();
+    if (approved && settings.enableAnimations) {
+      // Show success animation, then close
+      setShowSuccess(true);
+      setTimeout(() => window.close(), 600);
+    } else {
+      window.close();
+    }
   };
 
-  const handleApprove = useCallback(() => sendResponse(true), [details, rememberSite]);
+  const handleApprove = useCallback(() => sendResponse(true), [details, rememberSite, settings.enableAnimations]);
   const handleDeny = useCallback(() => sendResponse(false), [details]);
 
   // Keyboard shortcuts
@@ -117,6 +155,16 @@ function Approval() {
   })();
 
   const remainingBalance = details.balance - details.amount;
+
+  // Success state
+  if (showSuccess) {
+    return (
+      <div className="approval-container bg-background min-h-screen text-white flex flex-col items-center justify-center gap-4">
+        <AnimatedCheckmark />
+        <p className="text-lg font-semibold text-green-500 animate-fade-in-up">Paid!</p>
+      </div>
+    );
+  }
 
   return (
     <div className="approval-container bg-background min-h-screen text-white flex flex-col gap-4">

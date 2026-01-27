@@ -9,7 +9,7 @@ import type {
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
 import { isAutoApproved, recordPayment, getAllowlistEntry } from '../core/storage/allowlist-store';
 import { validatePaymentRequest } from '../core/protocol/xcashu';
-import { openApprovalPopup, waitForApproval } from './payment-coordinator';
+import { openApprovalPopup, waitForApproval, openUnlockPopup, waitForUnlock } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { getMints } from '../core/storage/settings-store';
 import { normalizeMintUrl } from '../shared/format';
@@ -107,11 +107,18 @@ export async function handlePaymentRequired(
 
     const sessionValid = await isSessionValid();
     if (!sessionValid) {
-      return {
-        type: 'PAYMENT_FAILED',
-        requestId,
-        error: 'Wallet is locked. Please unlock it first.',
-      };
+      // Open unlock popup and wait for user to unlock
+      try {
+        const popupId = await openUnlockPopup(requestId);
+        await waitForUnlock(requestId, popupId);
+        // User unlocked, continue with payment flow
+      } catch {
+        return {
+          type: 'PAYMENT_DENIED',
+          requestId,
+          reason: 'Wallet unlock cancelled or timed out',
+        };
+      }
     }
   }
 

@@ -37,8 +37,15 @@ function Popup() {
   const [selectedMintInfo, setSelectedMintInfo] = useState<{ url: string; name: string } | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [receiving, setReceiving] = useState(false);
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check for pending payment from URL params (opened by 402 request when locked)
+    const params = new URLSearchParams(window.location.search);
+    const pendingPayment = params.get('pendingPayment');
+    if (pendingPayment) {
+      setPendingPaymentId(pendingPayment);
+    }
     checkAuth();
   }, []);
 
@@ -90,7 +97,8 @@ function Popup() {
       ]);
       setBalances(balanceData || []);
       setTransactions(txData || []);
-      const loadedSettings = settingsData || DEFAULT_SETTINGS;
+      // Merge with defaults to ensure new settings fields have values
+      const loadedSettings = { ...DEFAULT_SETTINGS, ...settingsData };
       setSettings(loadedSettings);
       setMints(mintsData || []);
       // Apply theme
@@ -217,10 +225,23 @@ function Popup() {
 
   // Lock screen
   if (authState === 'locked') {
+    const handleUnlock = async () => {
+      // If this popup was opened for a pending payment, notify background and close
+      if (pendingPaymentId) {
+        await chrome.runtime.sendMessage({
+          type: 'UNLOCK_COMPLETE',
+          requestId: pendingPaymentId,
+        });
+        window.close();
+        return;
+      }
+      setAuthState('unlocked');
+    };
+
     return (
       <LockScreen
         authType={authType}
-        onUnlock={() => setAuthState('unlocked')}
+        onUnlock={handleUnlock}
         onForgot={() => setAuthState('recovery')}
       />
     );

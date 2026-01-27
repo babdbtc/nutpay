@@ -360,13 +360,19 @@ export async function generateSendToken(
   try {
     const normalizedUrl = normalizeMintUrl(mintUrl);
     const wallet = await getWalletForMint(normalizedUrl);
-    const selection = await selectProofs(normalizedUrl, amount);
+
+    // Estimate fees for the swap operation
+    const estimatedProofs = Math.ceil(Math.log2(amount + 1)) + 1;
+    const estimatedFee = Math.max(1, estimatedProofs);
+    const amountWithFees = amount + estimatedFee;
+
+    const selection = await selectProofs(normalizedUrl, amountWithFees);
 
     if (!selection) {
       const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
       return {
         success: false,
-        error: `Insufficient funds. Need ${amount} sats, have ${balance} sats`,
+        error: `Insufficient funds. Need ~${amountWithFees} sats (${amount} + ~${estimatedFee} fee), have ${balance} sats`,
       };
     }
 

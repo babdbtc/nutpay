@@ -11,6 +11,16 @@ const approvalCallbacks = new Map<
   }
 >();
 
+// Store unlock callbacks for pending payments
+const unlockCallbacks = new Map<
+  string,
+  {
+    resolve: () => void;
+    reject: (error: Error) => void;
+    popupId?: number;
+  }
+>();
+
 // Open the approval popup window
 export async function openApprovalPopup(
   requestId: string,
@@ -101,6 +111,72 @@ export function cancelApproval(requestId: string): void {
 
     if (callback.popupId) {
       chrome.windows.remove(callback.popupId).catch(() => {});
+    }
+  }
+}
+
+// Open the main popup for unlocking
+export async function openUnlockPopup(requestId: string): Promise<number> {
+  const params = new URLSearchParams({
+    pendingPayment: requestId,
+  });
+
+  const popup = await chrome.windows.create({
+    url: `popup.html?${params.toString()}`,
+    type: 'popup',
+    width: 380,
+    height: 560,
+    focused: true,
+  });
+
+  return popup.id!;
+}
+
+// Wait for wallet unlock
+export function waitForUnlock(
+  requestId: string,
+  popupId: number
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      unlockCallbacks.delete(requestId);
+      reject(new Error('Unlock timeout'));
+
+      // Close the popup if still open
+      chrome.windows.remove(popupId).catch(() => {});
+    }, TIMEOUTS.APPROVAL_POPUP);
+
+    unlockCallbacks.set(requestId, {
+      resolve: () => {
+        clearTimeout(timeoutId);
+        unlockCallbacks.delete(requestId);
+        resolve();
+      },
+      reject: (error) => {
+        clearTimeout(timeoutId);
+        unlockCallbacks.delete(requestId);
+        reject(error);
+      },
+      popupId,
+    });
+  });
+}
+
+// Handle unlock notification from popup
+export function handleUnlockComplete(requestId: string): void {
+  const callback = unlockCallbacks.get(requestId);
+  if (callback) {
+    callback.resolve();
+  }
+}
+
+// Handle unlock popup closed without unlocking
+export function handleUnlockPopupClosed(windowId: number): void {
+  for (const [requestId, callback] of unlockCallbacks) {
+    if (callback.popupId === windowId) {
+      callback.reject(new Error('Unlock cancelled'));
+      unlockCallbacks.delete(requestId);
+      break;
     }
   }
 }

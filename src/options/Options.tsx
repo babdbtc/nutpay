@@ -75,7 +75,8 @@ function Options() {
         chrome.runtime.sendMessage({ type: 'GET_ALLOWLIST' }),
         chrome.runtime.sendMessage({ type: 'GET_SECURITY_CONFIG' }),
       ]);
-      const loadedSettings = settingsData || DEFAULT_SETTINGS;
+      // Merge with defaults to ensure new settings fields have values
+      const loadedSettings = { ...DEFAULT_SETTINGS, ...settingsData };
       setSettings(loadedSettings);
       setMints(mintsData || PRESET_MINTS);
       setAllowlist(allowlistData || []);
@@ -532,6 +533,21 @@ function Options() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <Separator className="bg-border" />
+
+          <div className="flex items-center justify-between py-2">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Animations</Label>
+              <p className="text-xs text-muted-foreground">
+                Show animations for payments and actions
+              </p>
+            </div>
+            <Switch
+              checked={settings.enableAnimations}
+              onCheckedChange={(v) => updateSetting('enableAnimations', v)}
+            />
           </div>
 
           <Separator className="bg-border" />
