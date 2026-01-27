@@ -13,6 +13,7 @@ import { openApprovalPopup, waitForApproval } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { getMints } from '../core/storage/settings-store';
 import { normalizeMintUrl } from '../shared/format';
+import { getSecurityConfig, isSessionValid, isAccountLocked } from '../core/storage/security-store';
 
 // Store pending payments
 const pendingPayments = new Map<string, PendingPayment>();
@@ -91,6 +92,28 @@ export async function handlePaymentRequired(
   tabId: number
 ): Promise<PaymentTokenMessage | PaymentDeniedMessage | PaymentFailedMessage> {
   const { requestId, url, method, headers, body, paymentRequest, origin } = message;
+
+  // Check if wallet is locked before processing any payment
+  const securityConfig = await getSecurityConfig();
+  if (securityConfig?.enabled) {
+    const lockStatus = await isAccountLocked();
+    if (lockStatus.locked) {
+      return {
+        type: 'PAYMENT_FAILED',
+        requestId,
+        error: `Wallet locked. Try again in ${Math.ceil((lockStatus.remainingMs || 0) / 1000)} seconds`,
+      };
+    }
+
+    const sessionValid = await isSessionValid();
+    if (!sessionValid) {
+      return {
+        type: 'PAYMENT_FAILED',
+        requestId,
+        error: 'Wallet is locked. Please unlock it first.',
+      };
+    }
+  }
 
   // Validate the payment request
   const validation = validatePaymentRequest(paymentRequest);
