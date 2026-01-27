@@ -17,26 +17,26 @@ Traditional web payments have high friction: credit card forms, account creation
 ## How It Works
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Website   │     │   Nutpay    │     │    User     │     │   Website   │
-│   Server    │     │  Extension  │     │             │     │   Server    │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │                   │                   │                   │
-       │◄── GET /api ──────│                   │                   │
-       │                   │                   │                   │
-       │── 402 + payment ─►│                   │                   │
-       │   details         │                   │                   │
-       │                   │── Show approval ─►│                   │
-       │                   │   popup           │                   │
-       │                   │                   │                   │
-       │                   │◄─── Approve ──────│                   │
-       │                   │                   │                   │
-       │                   │── Retry with ────────────────────────►│
-       │                   │   X-Cashu token                       │
-       │                   │                                       │
-       │                   │◄───────────── 200 OK ─────────────────│
-       │                   │               + content               │
-       └───────────────────┴───────────────────────────────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Website   │     │   Nutpay    │     │    User     │
+│   Server    │     │  Extension  │     │             │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       │◄── GET /api ──────│                   │
+       │                   │                   │
+       │── 402 + payment ─►│                   │
+       │   details         │                   │
+       │                   │── Show approval ─►│
+       │                   │   popup           │
+       │                   │                   │
+       │                   │◄─── Approve ──────│
+       │                   │                   │
+       │◄─ Retry with ─────│                   │
+       │   X-Cashu token   │                   │
+       │                   │                   │
+       │── 200 OK ────────►│                   │
+       │   + content       │                   │
+       └───────────────────┴───────────────────┘
 ```
 
 ## Installation
