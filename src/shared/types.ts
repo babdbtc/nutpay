@@ -15,6 +15,7 @@ export type MessageType =
   | 'PAYMENT_FAILED'
   | 'APPROVAL_REQUEST'
   | 'APPROVAL_RESPONSE'
+  | 'UNLOCK_COMPLETE'
   | 'GET_BALANCE'
   | 'GET_TRANSACTIONS'
   | 'GET_FILTERED_TRANSACTIONS'
@@ -135,6 +136,7 @@ export interface Settings {
   autoDiscoverMints: boolean;
   displayFormat: 'symbol' | 'text'; // 'symbol' = ₿10, 'text' = 10 sats
   theme: ThemeId;
+  enableAnimations: boolean;
   nwcConnectionString?: string;
   nip60Pubkey?: string;
 }

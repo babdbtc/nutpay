@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoDiscoverMints: true,
   displayFormat: 'symbol', // Default to ₿ symbol
   theme: 'classic',
+  enableAnimations: true,
 };
 
 // Theme definitions

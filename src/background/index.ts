@@ -5,7 +5,7 @@ import './polyfill';
 
 import type { ExtensionMessage, PaymentRequiredMessage, ApprovalResponseMessage, AllowlistEntry } from '../shared/types';
 import { handlePaymentRequired, cleanupOldPendingPayments } from './request-handler';
-import { handleApprovalResponse, handlePopupClosed } from './payment-coordinator';
+import { handleApprovalResponse, handlePopupClosed, handleUnlockComplete, handleUnlockPopupClosed } from './payment-coordinator';
 import {
   getWalletBalances,
   receiveToken,
@@ -83,6 +83,12 @@ async function handleMessage(
     case 'APPROVAL_RESPONSE':
       handleApprovalResponse(message as ApprovalResponseMessage);
       return { success: true };
+
+    case 'UNLOCK_COMPLETE': {
+      const msg = message as ExtensionMessage & { requestId: string };
+      handleUnlockComplete(msg.requestId);
+      return { success: true };
+    }
 
     case 'GET_BALANCE':
       return getWalletBalances();
@@ -490,9 +496,10 @@ async function handleMessage(
   }
 }
 
-// Listen for window close events (for approval popup)
+// Listen for window close events (for approval and unlock popups)
 chrome.windows.onRemoved.addListener((windowId) => {
   handlePopupClosed(windowId);
+  handleUnlockPopupClosed(windowId);
 });
 
 // Periodic cleanup of old pending payments, quotes, and tokens
