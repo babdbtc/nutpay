@@ -119,38 +119,6 @@ export async function storeProofs(
   await addProofs(proofs, mintUrl);
 }
 
-// Mark proofs as spent
-export async function spendProofs(proofs: Proof[]): Promise<void> {
-  await removeProofs(proofs);
-}
-
-// Swap proofs for better denominations (consolidation)
-export async function consolidateProofs(mintUrl: string): Promise<void> {
-  const wallet = await getWalletForMint(mintUrl);
-  const storedProofs = await getProofsForMint(mintUrl);
-  const proofs = storedProofs.map((sp) => sp.proof);
-
-  if (proofs.length < 5) {
-    // Not worth consolidating
-    return;
-  }
-
-  const total = proofs.reduce((sum, p) => sum + p.amount, 0);
-
-  try {
-    // Swap all proofs for new ones with optimal denominations
-    const { send, keep } = await wallet.send(total, proofs, {
-      includeFees: true,
-    });
-
-    // Remove old proofs and add new ones
-    await removeProofs(proofs);
-    await addProofs([...send, ...keep], mintUrl);
-  } catch (error) {
-    console.error('Failed to consolidate proofs:', error);
-  }
-}
-
 // Reconcile proof states with mints (NUT-07)
 // Removes proofs that have been spent externally
 export async function reconcileProofStates(): Promise<number> {

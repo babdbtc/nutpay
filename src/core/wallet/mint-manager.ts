@@ -57,23 +57,6 @@ export async function getWalletForMint(mintUrl: string): Promise<Wallet> {
   return wallet;
 }
 
-// Create a wallet for recovery (with provided seed, starting from counter 0)
-export async function createRecoveryWallet(
-  mintUrl: string,
-  seed: Uint8Array
-): Promise<Wallet> {
-  const normalizedUrl = normalizeMintUrl(mintUrl);
-
-  const wallet = new Wallet(normalizedUrl, {
-    unit: 'sat',
-    bip39seed: seed,
-    // Start from 0 for recovery scanning
-  });
-
-  await wallet.loadMint();
-  return wallet;
-}
-
 // Get mint info
 export async function getMintInfo(
   mintUrl: string
@@ -87,17 +70,6 @@ export async function getMintInfo(
     };
   } catch {
     return {};
-  }
-}
-
-// Check if a mint is reachable
-export async function checkMintHealth(mintUrl: string): Promise<boolean> {
-  try {
-    const mint = await getMintConnection(mintUrl);
-    await mint.getInfo();
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -146,12 +118,6 @@ export async function findMintForPayment(
   // Otherwise, we need the exact mint specified
   // In the future, we could implement cross-mint swaps here
   return null;
-}
-
-// Clear cached connections (useful for testing or after settings change)
-export function clearMintCache(): void {
-  mintConnections.clear();
-  walletConnections.clear();
 }
 
 // Get detailed mint information

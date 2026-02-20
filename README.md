@@ -103,63 +103,73 @@ Nutpay uses **BIP39 seed phrases** (12 words) for wallet backup, compatible with
 
 # For Website Developers
 
-## Implementing X-Cashu Payments
+## Implementing X-Cashu Payments (NUT-24)
 
-Adding Cashu payments to your website is straightforward. When a user requests paid content, return a 402 response with payment details. Nutpay handles the rest.
+Adding Cashu payments to your website is straightforward. Nutpay implements the [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) HTTP payment protocol. When a user requests paid content, return a 402 response with an `X-Cashu` header containing a [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) encoded payment request. Nutpay handles the rest.
 
-### Step 1: Return 402 Payment Required
+### Step 1: Return 402 with X-Cashu Header
 
-When a request needs payment, return:
+When a request needs payment, return a 402 response with the `X-Cashu` header containing a CBOR-encoded payment request (`creqA...` format):
 
 ```http
 HTTP/1.1 402 Payment Required
+X-Cashu: creqApGF0gaNhdGFzYWmBo...
 Content-Type: application/json
 
-{
-  "mint": "https://mint.minibits.cash/Bitcoin",
-  "amount": 1,
-  "unit": "sat"
+{"status": 402, "message": "Payment Required"}
+```
+
+The `X-Cashu` header value is a NUT-18 payment request encoding the accepted mints, amount, and unit. The JSON body is optional and informational only — Nutpay reads payment details exclusively from the header.
+
+Use `cashu-ts` to build the payment request:
+
+```javascript
+import { PaymentRequest } from '@cashu/cashu-ts';
+
+function buildPaymentRequestHeader(mintUrl, amount, unit) {
+  const pr = new PaymentRequest(
+    [],          // transport: empty = in-band payment (NUT-24)
+    undefined,   // id
+    amount,      // required amount
+    unit,        // e.g. 'sat'
+    [mintUrl],   // accepted mints (can list multiple)
+    undefined,   // description
+    true         // singleUse
+  );
+  return pr.toEncodedRequest(); // returns "creqA..." string
 }
 ```
 
-**Fields:**
-- `mint` - The Cashu mint URL you accept payments from
-- `amount` - Payment amount required
-- `unit` - Unit of payment (typically `"sat"` for satoshis)
+### Step 2: Accept X-Cashu Request Header
 
-### Step 2: Accept X-Cashu Header
-
-When Nutpay retries the request, it includes the payment token:
+When Nutpay retries the request after payment, it includes the ecash token:
 
 ```http
 GET /api/content HTTP/1.1
 X-Cashu: cashuBpGF0gaJhaUgA...
 ```
 
-Validate this token on your server before returning content.
+Validate this token on your server before returning content. Return HTTP 400 for invalid tokens (per NUT-24).
 
 ### Step 3: Validate and Redeem Token
 
 ```javascript
 import { getDecodedToken } from '@cashu/cashu-ts';
 
-async function validatePayment(token, expectedMint, expectedAmount) {
+function validatePayment(token, expectedMint, expectedAmount) {
   try {
     const decoded = getDecodedToken(token);
 
-    // Verify mint matches
     if (decoded.mint !== expectedMint) {
       return { valid: false, error: 'Wrong mint' };
     }
 
-    // Verify amount
     const total = decoded.proofs.reduce((sum, p) => sum + p.amount, 0);
     if (total < expectedAmount) {
       return { valid: false, error: 'Insufficient amount' };
     }
 
-    // IMPORTANT: Redeem the token with the mint to prevent double-spending
-    // In production, swap the proofs before returning content
+    // IMPORTANT: Redeem/swap the proofs with the mint to prevent double-spending
 
     return { valid: true, amount: total };
   } catch (error) {
@@ -172,14 +182,21 @@ async function validatePayment(token, expectedMint, expectedAmount) {
 
 ```javascript
 import http from 'http';
-import { getDecodedToken } from '@cashu/cashu-ts';
+import { getDecodedToken, PaymentRequest } from '@cashu/cashu-ts';
 
 const MINT_URL = 'https://mint.minibits.cash/Bitcoin';
 const PRICE = 1; // 1 sat
+const UNIT = 'sat';
+
+function buildPaymentRequest(mintUrl, amount, unit) {
+  const pr = new PaymentRequest([], undefined, amount, unit, [mintUrl], undefined, true);
+  return pr.toEncodedRequest();
+}
 
 const server = http.createServer(async (req, res) => {
-  // Enable CORS for the X-Cashu header
+  // CORS — expose X-Cashu so the browser extension can read it
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Cashu');
   res.setHeader('Access-Control-Expose-Headers', 'X-Cashu');
 
@@ -192,14 +209,14 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/premium-content') {
     const token = req.headers['x-cashu'];
 
-    // No token? Request payment
+    // No token → request payment via NUT-24
     if (!token) {
-      res.writeHead(402, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        mint: MINT_URL,
-        amount: PRICE,
-        unit: 'sat'
-      }));
+      const paymentRequest = buildPaymentRequest(MINT_URL, PRICE, UNIT);
+      res.writeHead(402, {
+        'Content-Type': 'application/json',
+        'X-Cashu': paymentRequest,
+      });
+      res.end(JSON.stringify({ status: 402, message: 'Payment Required' }));
       return;
     }
 
@@ -216,24 +233,18 @@ const server = http.createServer(async (req, res) => {
         throw new Error('Insufficient payment');
       }
 
-      // TODO: Redeem token with mint to prevent double-spend
+      // TODO: Redeem/swap proofs with the mint to prevent double-spend
 
-      // Payment valid - return content
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         success: true,
         content: 'Your premium content here!',
-        paid: paid
+        paid,
       }));
-
     } catch (error) {
-      res.writeHead(402, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: error.message,
-        mint: MINT_URL,
-        amount: PRICE,
-        unit: 'sat'
-      }));
+      // NUT-24: Return 400 for invalid tokens
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ detail: error.message, code: 0 }));
     }
     return;
   }
@@ -247,10 +258,10 @@ server.listen(3000);
 
 ### Frontend Integration
 
-No frontend changes needed! Nutpay intercepts fetch/XHR requests automatically. Your existing code works as-is:
+No frontend changes needed! Nutpay intercepts `fetch()` requests automatically. Your existing code works as-is:
 
 ```javascript
-// This just works - Nutpay handles the 402 → pay → retry flow
+// This just works — Nutpay handles the 402 → pay → retry flow
 const response = await fetch('/premium-content');
 const data = await response.json();
 console.log(data.content); // "Your premium content here!"
@@ -285,19 +296,23 @@ Users can add custom mints in the extension settings. During wallet recovery, th
 ## Technical Details
 
 - **Manifest V3** - Built for modern Chrome extension standards
+- **NUT-24 / NUT-18** - HTTP 402 payment flow via `X-Cashu` header with CBOR-encoded payment requests
 - **NUT-13 Deterministic Secrets** - BIP39 seed-based wallet recovery
-- **Encrypted storage** - Proofs and seed encrypted with AES-GCM
+- **NUT-07 Proof State Reconciliation** - Periodic + startup proof state checks against mints
+- **NUT-02 Fee Calculation** - Real fee schedule from mint keysets, not heuristics
+- **Atomic proof lifecycle** - Proofs marked `PENDING_SPEND` before mint operations; recovered on service worker restart
+- **Encrypted storage** - Proofs and seed encrypted with AES-GCM-256
 - **Proof selection** - Optimizes for minimal change using subset-sum algorithm
 - **Counter persistence** - Keyset counters tracked for deterministic proof derivation
 - **Auto-cleanup** - Expired pending payments cleaned automatically
 
 ## Credits
 
-This extension implements the [X-Cashu](https://github.com/cashubtc/xcashu) protocol created by [Cashu](https://github.com/cashubtc). X-Cashu enables HTTP 402 Payment Required flows using Cashu ecash tokens.
+This extension implements the [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) HTTP payment protocol and [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) payment requests from the [Cashu](https://github.com/cashubtc) ecash specification.
 
 Wallet recovery uses [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) deterministic secrets for seed-based backup and restore.
 
-Built with [cashu-ts](https://github.com/cashubtc/cashu-ts) v3, the TypeScript implementation of the Cashu protocol.
+Built with [cashu-ts](https://github.com/cashubtc/cashu-ts) v3.5, the TypeScript implementation of the Cashu protocol.
 
 Learn more about Cashu at [cashu.space](https://cashu.space).
 
