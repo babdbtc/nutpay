@@ -141,10 +141,29 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
   const handleAddCustomMint = () => {
     if (!customMintUrl.trim()) return;
+    setError(null);
 
     try {
-      new URL(customMintUrl); // Validate URL
-      setSelectedMints((prev) => new Set([...prev, customMintUrl.trim()]));
+      const url = customMintUrl.trim();
+      new URL(url); // Validate URL
+
+      // Check for duplicates
+      if (availableMints.some((m) => m.url === url)) {
+        setError('Mint already in list');
+        return;
+      }
+
+      // Add to the visible list
+      const newMint: MintConfig = {
+        url,
+        name: new URL(url).hostname,
+        enabled: true,
+        trusted: false,
+      };
+      setAvailableMints((prev) => [...prev, newMint]);
+
+      // Mark it as selected
+      setSelectedMints((prev) => new Set([...prev, url]));
       setCustomMintUrl('');
     } catch {
       setError('Invalid mint URL');

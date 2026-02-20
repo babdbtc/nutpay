@@ -137,6 +137,3 @@ export const TIMEOUTS = {
 
 // X-Cashu header name
 export const XCASHU_HEADER = 'X-Cashu';
-
-// Default unit
-export const DEFAULT_UNIT = 'sat';
