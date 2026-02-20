@@ -480,10 +480,6 @@ function Popup() {
               mintName={selectedMintInfo.name}
               displayFormat={settings.displayFormat}
               onClose={() => setSelectedMintInfo(null)}
-              onConsolidate={async () => {
-                setSelectedMintInfo(null);
-                loadData();
-              }}
             />
           )}
         </DialogContent>

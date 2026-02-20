@@ -31,7 +31,7 @@ export async function openApprovalPopup(
   const params = new URLSearchParams({
     requestId,
     origin,
-    mints: paymentRequest.mints.join(','),
+    mints: JSON.stringify(paymentRequest.mints),
     amount: paymentRequest.amount.toString(),
     unit: paymentRequest.unit,
     balance: currentBalance.toString(),

@@ -4,6 +4,7 @@ import { setCounters, type KeysetCounters } from '../storage/counter-store';
 import { storeSeed } from '../storage/seed-store';
 import type { RecoveryProgress, RecoveryResult } from '../../shared/types';
 import { normalizeMintUrl } from '../../shared/format';
+import { clearWalletCache } from './mint-manager';
 
 // Recovery configuration
 const GAP_LIMIT = 3; // Stop after this many consecutive empty batches
@@ -120,9 +121,13 @@ export async function recoverFromSeed(
       }
     }
 
-    // Store the seed if recovery was successful
-    if (results.totalRecovered > 0 || results.errors.length === 0) {
+    // Only store the seed if we actually recovered proofs.
+    // This prevents a wrong mnemonic (which finds nothing) from overwriting
+    // the real seed. Initial wallet setup stores the seed via SETUP_SECURITY
+    // or SETUP_WALLET_SEED handlers — recovery should only persist on success.
+    if (results.totalRecovered > 0) {
       await storeSeed(seed);
+      clearWalletCache();
 
       // Update counters with safety buffer to avoid reuse
       for (const keysetId of Object.keys(finalCounters)) {

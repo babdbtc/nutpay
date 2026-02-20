@@ -22,7 +22,7 @@ import type { MintConfig } from '../shared/types';
 import { getAllowlist, setAllowlistEntry, removeAllowlistEntry, createDefaultAllowlistEntry } from '../core/storage/allowlist-store';
 import { getPendingMintQuotes, cleanupOldMintQuotes } from '../core/storage/pending-quote-store';
 import { getPendingTokens, cleanupOldPendingTokens } from '../core/storage/pending-token-store';
-import { getMintDetails, getMintBalanceDetails } from '../core/wallet/mint-manager';
+import { getMintDetails, getMintBalanceDetails, clearWalletCache } from '../core/wallet/mint-manager';
 import {
   getSecurityConfig,
   setSecurityConfig,
@@ -233,6 +233,7 @@ async function handleMessage(
       // Derive and store the wallet seed for NUT-13
       const seed = mnemonicToSeed(recoveryPhrase);
       await storeSeed(seed);
+      clearWalletCache();
 
       const config: SecurityConfig = {
         enabled: true,
@@ -370,6 +371,7 @@ async function handleMessage(
       // Derive and store the seed from the mnemonic
       const seed = mnemonicToSeed(msg.phrase);
       await storeSeed(seed);
+      clearWalletCache();
 
       // Setup new security config with the same mnemonic as recovery phrase
       const newSalt = generateSalt();
@@ -447,6 +449,7 @@ async function handleMessage(
 
       const seed = mnemonicToSeed(msg.mnemonic);
       await storeSeed(seed);
+      clearWalletCache();
 
       return { success: true };
     }

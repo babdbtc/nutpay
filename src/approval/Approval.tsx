@@ -54,7 +54,10 @@ function Approval() {
     setDetails({
       requestId: params.get('requestId') || '',
       origin: params.get('origin') || '',
-      mints: (params.get('mints') || '').split(',').filter(Boolean),
+      mints: (() => {
+        const raw = params.get('mints') || '[]';
+        try { return JSON.parse(raw) as string[]; } catch { return raw.split(',').filter(Boolean); }
+      })(),
       amount: parseInt(params.get('amount') || '0', 10),
       unit: params.get('unit') || 'sat',
       balance: parseInt(params.get('balance') || '0', 10),
@@ -75,7 +78,10 @@ function Approval() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
-          handleDeny();
+          // Call sendResponse(false) directly instead of handleDeny to avoid stale closure.
+          // handleDeny captured from useCallback depends on `details` which may be null
+          // when this effect was first set up.
+          sendResponse(false);
           return 0;
         }
         return prev - 1;
@@ -85,7 +91,7 @@ function Approval() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [details]);
 
   const sendResponse = (approved: boolean) => {
     if (!details) return;

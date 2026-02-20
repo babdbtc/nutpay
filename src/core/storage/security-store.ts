@@ -147,9 +147,16 @@ export async function getRecoveryPhrase(): Promise<string | null> {
     return await decryptString(ciphertext);
   } catch (error) {
     console.error('[Nutpay] Failed to decrypt recovery phrase:', error);
-    // Fallback: try legacy base64 decoding for migration
+    // Fallback: try legacy base64 decoding for migration.
+    // Validate the result looks like a BIP39 mnemonic (multiple words, ASCII only)
+    // to avoid returning garbage from AES-GCM ciphertext decoded as base64.
     try {
-      return atob(ciphertext);
+      const decoded = atob(ciphertext);
+      const words = decoded.trim().split(/\s+/);
+      if (words.length >= 12 && words.every((w) => /^[a-z]+$/.test(w))) {
+        return decoded;
+      }
+      return null;
     } catch {
       return null;
     }

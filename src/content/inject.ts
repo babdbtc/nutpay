@@ -9,7 +9,7 @@ interface PendingRequest {
     url: string;
     method: string;
     headers: Record<string, string>;
-    body: string | null;
+    body: BodyInit | null;
   };
 }
 
@@ -23,7 +23,7 @@ const pendingRequests = new Map<string, PendingRequest>();
 
 // Generate unique request ID
 function generateRequestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
 // Send message to content script
@@ -108,24 +108,37 @@ window.fetch = async function (
       ? input.toString()
       : input.url;
 
-  // Extract headers from init
+  // Extract headers — check both the Request object (if input is a Request)
+  // and the init override. Init headers take precedence per the Fetch spec.
   const headers: Record<string, string> = {};
-  if (init?.headers) {
-    if (init.headers instanceof Headers) {
-      init.headers.forEach((value, key) => {
-        headers[key] = value;
-      });
-    } else if (Array.isArray(init.headers)) {
-      init.headers.forEach(([key, value]) => {
-        headers[key] = value;
-      });
+  const extractHeaders = (source: HeadersInit | Headers) => {
+    if (source instanceof Headers) {
+      source.forEach((value, key) => { headers[key] = value; });
+    } else if (Array.isArray(source)) {
+      source.forEach(([key, value]) => { headers[key] = value; });
     } else {
-      Object.assign(headers, init.headers);
+      Object.assign(headers, source);
     }
+  };
+
+  // First, capture headers from Request object (if applicable)
+  if (input instanceof Request) {
+    extractHeaders(input.headers);
+  }
+  // Then, override/merge with init headers (takes precedence)
+  if (init?.headers) {
+    extractHeaders(init.headers);
   }
 
   // Create a promise that will be resolved when payment completes or is denied
   return new Promise((resolve) => {
+    // Preserve the original body for retry. For the message to the content script
+    // (which serializes via postMessage), only string bodies can be forwarded;
+    // other types (FormData, Blob, etc.) are kept for the retry but sent as null
+    // in the notification since the background doesn't need the body.
+    const bodyForRetry: BodyInit | null = init?.body ?? null;
+    const bodyForMessage: string | null = typeof init?.body === 'string' ? init.body : null;
+
     pendingRequests.set(requestId, {
       resolve,
       originalResponse: response,
@@ -133,7 +146,7 @@ window.fetch = async function (
         url,
         method: init?.method || 'GET',
         headers,
-        body: typeof init?.body === 'string' ? init.body : null,
+        body: bodyForRetry,
       },
     });
 
@@ -145,7 +158,7 @@ window.fetch = async function (
       url,
       method: init?.method || 'GET',
       headers,
-      body: typeof init?.body === 'string' ? init.body : null,
+      body: bodyForMessage,
       paymentRequestEncoded: xcashuHeader,
       origin: window.location.origin,
     });

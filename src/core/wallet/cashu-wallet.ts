@@ -2,9 +2,9 @@ import { getEncodedTokenV4, getDecodedToken, type Proof, type MintQuoteResponse,
 import { getWalletForMint, discoverMint, findMintForPayment } from './mint-manager';
 import {
   selectProofs,
+  selectProofsForSpend,
   storeProofs,
   getBalanceByMint,
-  markProofsPendingSpend,
   finalizePendingSpend,
   revertPendingProofs,
 } from './proof-manager';
@@ -63,9 +63,10 @@ export async function createPaymentToken(
   // Get wallet for this mint
   const wallet = await getWalletForMint(actualMint);
 
-  // Select proofs first, then calculate actual fees from the mint's fee schedule (NUT-02)
-  const initialSelection = await selectProofs(actualMint, amount);
-  if (!initialSelection) {
+  // Atomically select proofs and mark them PENDING_SPEND.
+  // First try the base amount, then check if fees require more.
+  let selection = await selectProofsForSpend(actualMint, amount);
+  if (!selection) {
     const balance = (await getBalanceByMint()).get(actualMint) || 0;
     return {
       success: false,
@@ -74,13 +75,14 @@ export async function createPaymentToken(
   }
 
   // Calculate actual fees based on the selected proofs and mint's fee schedule
-  const fee = wallet.getFeesForProofs(initialSelection.proofs);
+  const fee = wallet.getFeesForProofs(selection.proofs);
   const amountWithFees = amount + fee;
 
   // Re-select proofs if we need more to cover fees
-  let selection = initialSelection;
   if (selection.total < amountWithFees) {
-    const reselection = await selectProofs(actualMint, amountWithFees);
+    // Revert the initial selection and try with the higher amount
+    await revertPendingProofs(selection.proofs);
+    const reselection = await selectProofsForSpend(actualMint, amountWithFees);
     if (!reselection) {
       const balance = (await getBalanceByMint()).get(actualMint) || 0;
       return {
@@ -102,10 +104,9 @@ export async function createPaymentToken(
   });
 
   try {
-    // Mark proofs as PENDING_SPEND before sending to mint.
+    // Proofs are already marked PENDING_SPEND by selectProofsForSpend.
     // If the service worker dies after the mint accepts but before cleanup,
     // reconciliation will detect them as spent and remove them.
-    await markProofsPendingSpend(selection.proofs);
 
     // Create the send token using v3 ops API
     const seedExists = await hasSeed();
@@ -271,7 +272,7 @@ export async function createLightningReceiveInvoice(
       : Date.now() + 60 * 60 * 1000;
 
     const pendingQuote: PendingMintQuote = {
-      id: `mq-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `mq-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       quoteId: mintQuote.quote,
       mintUrl: normalizedUrl,
       amount,
@@ -400,9 +401,9 @@ export async function generateSendToken(
     const normalizedUrl = normalizeMintUrl(mintUrl);
     const wallet = await getWalletForMint(normalizedUrl);
 
-    // Select proofs first, then calculate actual fees from the mint's fee schedule (NUT-02)
-    const initialSelection = await selectProofs(normalizedUrl, amount);
-    if (!initialSelection) {
+    // Atomically select proofs and mark them PENDING_SPEND
+    let selection = await selectProofsForSpend(normalizedUrl, amount);
+    if (!selection) {
       const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
       return {
         success: false,
@@ -410,12 +411,13 @@ export async function generateSendToken(
       };
     }
 
-    const fee = wallet.getFeesForProofs(initialSelection.proofs);
+    const fee = wallet.getFeesForProofs(selection.proofs);
     const amountWithFees = amount + fee;
 
-    let selection = initialSelection;
     if (selection.total < amountWithFees) {
-      const reselection = await selectProofs(normalizedUrl, amountWithFees);
+      // Revert and re-select with fee-inclusive amount
+      await revertPendingProofs(selection.proofs);
+      const reselection = await selectProofsForSpend(normalizedUrl, amountWithFees);
       if (!reselection) {
         const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
         return {
@@ -426,8 +428,7 @@ export async function generateSendToken(
       selection = reselection;
     }
 
-    // Mark proofs as PENDING_SPEND before sending to mint
-    await markProofsPendingSpend(selection.proofs);
+    // Proofs are already marked PENDING_SPEND by selectProofsForSpend
 
     // Create send proofs using v3 ops API
     const seedExists = await hasSeed();
@@ -466,7 +467,7 @@ export async function generateSendToken(
 
     // Save pending token for recovery
     const pendingToken: PendingToken = {
-      id: `pt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `pt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       token,
       amount: actualAmount,
       mintUrl: normalizedUrl,
@@ -555,7 +556,8 @@ export async function payLightningInvoice(
     const wallet = await getWalletForMint(normalizedUrl);
     const totalNeeded = amount + feeReserve;
 
-    const selection = await selectProofs(normalizedUrl, totalNeeded);
+    // Atomically select proofs and mark them PENDING_SPEND
+    const selection = await selectProofsForSpend(normalizedUrl, totalNeeded);
 
     if (!selection) {
       const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
@@ -588,7 +590,7 @@ export async function payLightningInvoice(
     });
 
     const pendingToken: PendingToken = {
-      id: `pt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `pt-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       token,
       amount: selection.total,
       mintUrl: normalizedUrl,
@@ -599,8 +601,7 @@ export async function payLightningInvoice(
     };
     await addPendingToken(pendingToken);
 
-    // Mark proofs as PENDING_SPEND before sending to mint
-    await markProofsPendingSpend(selection.proofs);
+    // Proofs are already marked PENDING_SPEND by selectProofsForSpend
 
     // Perform the melt using ops builder for deterministic change secrets (NUT-13)
     let meltResponse: Awaited<ReturnType<typeof wallet.meltProofs>>;
@@ -628,18 +629,25 @@ export async function payLightningInvoice(
           // Note: checkMeltQuote returns blinded signatures, not unblinded proofs,
           // so we can't recover change here. With deterministic secrets (NUT-13),
           // the change is recoverable via seed recovery. Without, it's lost.
-          await finalizePendingSpend(selection.proofs, [], normalizedUrl);
-          await updatePendingTokenStatus(pendingToken.id, 'claimed');
-          meltQuoteCache.delete(quoteId);
+          //
+          // Wrap cleanup in its own try/catch so a storage error doesn't mask
+          // the fact that the Lightning payment succeeded.
+          try {
+            await finalizePendingSpend(selection.proofs, [], normalizedUrl);
+            await updatePendingTokenStatus(pendingToken.id, 'claimed');
+            meltQuoteCache.delete(quoteId);
 
-          await addTransaction({
-            type: 'payment',
-            amount: selection.total,
-            unit: 'sat',
-            mintUrl: normalizedUrl,
-            origin: 'Lightning Send',
-            status: 'completed',
-          });
+            await addTransaction({
+              type: 'payment',
+              amount: selection.total,
+              unit: 'sat',
+              mintUrl: normalizedUrl,
+              origin: 'Lightning Send',
+              status: 'completed',
+            });
+          } catch (cleanupError) {
+            console.error('[Nutpay] Post-melt cleanup failed (payment DID succeed):', cleanupError);
+          }
 
           return {
             success: true,

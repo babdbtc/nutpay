@@ -17,7 +17,7 @@ export async function addTransaction(
 
   const newTx: Transaction = {
     ...transaction,
-    id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
     timestamp: Date.now(),
   };
 

@@ -9,8 +9,36 @@ import { STORAGE_KEYS } from '../../shared/constants';
  * encrypt/decrypt operations.
  */
 
-// Get or create the shared AES-GCM encryption key
-async function getEncryptionKey(): Promise<CryptoKey> {
+// Chunk-safe binary-to-base64 conversion.
+// String.fromCharCode(...largeArray) can exceed the engine's max argument count
+// (~65K on V8), causing a stack overflow for large proof stores.
+const CHUNK_SIZE = 8192;
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, i + CHUNK_SIZE);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+// Singleton promise guard: ensures only one getEncryptionKey call runs at a time.
+// Without this, two concurrent calls on first access would both generate different
+// keys and the loser's encrypted data becomes permanently unrecoverable.
+let keyPromise: Promise<CryptoKey> | null = null;
+
+function getEncryptionKey(): Promise<CryptoKey> {
+  if (!keyPromise) {
+    keyPromise = getEncryptionKeyInner().catch((err) => {
+      // Reset so a retry can succeed
+      keyPromise = null;
+      throw err;
+    });
+  }
+  return keyPromise;
+}
+
+async function getEncryptionKeyInner(): Promise<CryptoKey> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS.ENCRYPTION_KEY);
 
   if (stored[STORAGE_KEYS.ENCRYPTION_KEY]) {
@@ -35,7 +63,7 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   );
 
   const exported = await crypto.subtle.exportKey('raw', key);
-  const keyString = btoa(String.fromCharCode(...new Uint8Array(exported)));
+  const keyString = uint8ToBase64(new Uint8Array(exported));
   await chrome.storage.local.set({ [STORAGE_KEYS.ENCRYPTION_KEY]: keyString });
 
   return key;
@@ -60,7 +88,7 @@ export async function encryptString(data: string): Promise<string> {
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
 
-  return btoa(String.fromCharCode(...combined));
+  return uint8ToBase64(combined);
 }
 
 /**
@@ -102,7 +130,7 @@ export async function encryptBytes(data: Uint8Array): Promise<string> {
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
 
-  return btoa(String.fromCharCode(...combined));
+  return uint8ToBase64(combined);
 }
 
 /**
