@@ -120,6 +120,13 @@ export async function findMintForPayment(
   return null;
 }
 
+// Clear cached wallet connections.
+// Must be called after seed changes (recovery, onboarding) to ensure
+// wallets are re-created with the new seed and fresh counters.
+export function clearWalletCache(): void {
+  walletConnections.clear();
+}
+
 // Get detailed mint information
 export async function getMintDetails(mintUrl: string): Promise<{
   name: string;
@@ -159,7 +166,9 @@ export async function getMintBalanceDetails(mintUrl: string): Promise<{
 }> {
   const allProofs = await getProofs();
   const normalizedUrl = normalizeMintUrl(mintUrl);
-  const storedProofs = allProofs.filter((p) => normalizeMintUrl(p.mintUrl) === normalizedUrl);
+  const storedProofs = allProofs.filter(
+    (p) => normalizeMintUrl(p.mintUrl) === normalizedUrl && p.status !== 'PENDING_SPEND'
+  );
 
   const balance = storedProofs.reduce((sum, sp) => sum + sp.amount, 0);
   const proofCount = storedProofs.length;

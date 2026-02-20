@@ -1,7 +1,7 @@
 // Content script - bridges between injected script and background service worker
-// Note: Content scripts can't use ES module imports, so constants are inlined
-
-// Message event names (must match inject.ts)
+// NOTE: Constants are inlined here intentionally. Content scripts run as classic
+// scripts (not ES modules) in MV3, so they cannot use `import` statements.
+// If these values are changed, update inject.ts and shared/constants.ts too.
 const MSG_TO_CONTENT = 'nutpay_to_content';
 const MSG_FROM_CONTENT = 'nutpay_from_content';
 
@@ -55,6 +55,16 @@ function listenFromInjected(): void {
         // Forward to background and wait for response
         const response = await chrome.runtime.sendMessage(message);
         console.log('[Nutpay] Got response from background:', response);
+
+        // Guard against undefined response (service worker killed mid-request)
+        if (!response) {
+          postToInjected({
+            type: 'PAYMENT_FAILED',
+            requestId: message.requestId,
+            error: 'Background service worker unavailable',
+          });
+          return;
+        }
 
         // Forward response back to injected script
         postToInjected(response);

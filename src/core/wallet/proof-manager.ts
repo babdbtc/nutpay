@@ -6,10 +6,10 @@ import {
   removeProofs,
   getBalanceByMint,
   getTotalBalance,
-  markProofsPendingSpend,
   finalizePendingSpend,
   getPendingSpendProofs,
   revertPendingProofs,
+  selectAndMarkPending,
 } from '../storage/proof-store';
 import { getWalletForMint } from './mint-manager';
 
@@ -111,6 +111,43 @@ function greedySelect(proofs: Proof[], amount: number): ProofSelection {
   };
 }
 
+// Atomically select proofs and mark them as PENDING_SPEND.
+// This prevents two concurrent payments from selecting the same proofs.
+export async function selectProofsForSpend(
+  mintUrl: string,
+  amount: number
+): Promise<ProofSelection | null> {
+  const result = await selectAndMarkPending(mintUrl, amount, (proofs, target) => {
+    if (proofs.length === 0) return null;
+
+    const totalAvailable = proofs.reduce((sum, p) => sum + p.amount, 0);
+    if (totalAvailable < target) return null;
+
+    // Try exact match first (minimizes change)
+    const exactMatch = findExactMatch(proofs, target);
+    if (exactMatch) return exactMatch;
+
+    // Fall back to greedy
+    const sorted = [...proofs].sort((a, b) => b.amount - a.amount);
+    const selected: Proof[] = [];
+    let total = 0;
+    for (const proof of sorted) {
+      if (total >= target) break;
+      selected.push(proof);
+      total += proof.amount;
+    }
+    return selected;
+  });
+
+  if (!result) return null;
+
+  return {
+    proofs: result.proofs,
+    total: result.total,
+    change: result.total - amount,
+  };
+}
+
 // Store new proofs received (from change or external source)
 export async function storeProofs(
   proofs: Proof[],
@@ -209,7 +246,6 @@ export {
   getTotalBalance,
   getProofs,
   getProofsForMint,
-  markProofsPendingSpend,
   finalizePendingSpend,
   revertPendingProofs,
 };

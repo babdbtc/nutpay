@@ -49,15 +49,18 @@ export async function getPendingTokensByStatus(
   return tokens.filter((t) => t.status === status);
 }
 
-// Clean up old pending tokens (claimed or expired older than 24 hours)
+// Clean up old pending tokens:
+// - claimed/expired: remove after 24 hours
+// - pending: remove after 7 days (likely stuck/abandoned)
 export async function cleanupOldPendingTokens(): Promise<void> {
   const tokens = await getPendingTokens();
   const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
   const active = tokens.filter((t) => {
-    // Keep pending tokens
     if (t.status === 'pending') {
-      return true;
+      // Keep pending tokens for up to 7 days
+      return t.createdAt > sevenDaysAgo;
     }
     // Keep recent claimed/expired for reference
     return t.createdAt > oneDayAgo;

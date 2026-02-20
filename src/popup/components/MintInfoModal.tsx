@@ -10,7 +10,6 @@ interface MintInfoModalProps {
   mintName: string;
   displayFormat: 'symbol' | 'text';
   onClose: () => void;
-  onConsolidate?: () => void;
 }
 
 interface MintDetails {
@@ -34,13 +33,11 @@ export function MintInfoModal({
   mintName,
   displayFormat,
   onClose,
-  onConsolidate,
 }: MintInfoModalProps) {
   const [loading, setLoading] = useState(true);
   const [mintInfo, setMintInfo] = useState<MintDetails | null>(null);
   const [balanceDetails, setBalanceDetails] = useState<BalanceDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [consolidating, setConsolidating] = useState(false);
 
   useEffect(() => {
     loadMintInfo();
@@ -62,14 +59,6 @@ export function MintInfoModal({
       setError('Failed to load mint information');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleConsolidate = async () => {
-    if (onConsolidate) {
-      setConsolidating(true);
-      await onConsolidate();
-      setConsolidating(false);
     }
   };
 
@@ -182,22 +171,6 @@ export function MintInfoModal({
 
       {/* Actions */}
       <div className="flex gap-3">
-        {balanceDetails && balanceDetails.proofCount > 5 && (
-          <Button
-            className="flex-1"
-            onClick={handleConsolidate}
-            disabled={consolidating}
-          >
-            {consolidating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Consolidating...
-              </>
-            ) : (
-              'Consolidate Proofs'
-            )}
-          </Button>
-        )}
         <Button variant="secondary" className="flex-1" onClick={onClose}>
           Close
         </Button>

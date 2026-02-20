@@ -22,7 +22,7 @@ export function decodePaymentRequestHeader(
       unit: pr.unit,
       id: pr.id || undefined,
       description: pr.description || undefined,
-      singleUse: pr.singleUse || undefined,
+      singleUse: pr.singleUse ?? undefined,
     };
   } catch (error) {
     console.warn('[Nutpay] Failed to decode NUT-18 payment request:', error);

@@ -108,5 +108,5 @@ export function isApprovalResponse(
 
 // Generate unique request ID
 export function generateRequestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
