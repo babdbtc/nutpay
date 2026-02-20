@@ -149,12 +149,16 @@ export interface MintConfig {
   trusted: boolean;
 }
 
+// Proof lifecycle status
+export type ProofStatus = 'LIVE' | 'PENDING_SPEND';
+
 // Stored proof with metadata
 export interface StoredProof {
   proof: Proof;
   mintUrl: string;
   amount: number;
   dateReceived: number;
+  status?: ProofStatus; // undefined or 'LIVE' = live, 'PENDING_SPEND' = sent to mint, awaiting confirmation
 }
 
 // Transaction record

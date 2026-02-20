@@ -509,9 +509,33 @@ setInterval(() => {
   cleanupOldPendingTokens();
 }, 60000);
 
-// Periodic proof state reconciliation (NUT-07) every 5 minutes
-// Removes proofs that were spent externally or in failed transactions
-import { reconcileProofStates } from '../core/wallet/proof-manager';
+// Proof state management (NUT-07)
+import { reconcileProofStates, recoverPendingProofs } from '../core/wallet/proof-manager';
+
+// Run immediately on service worker startup:
+// 1. Recover any proofs left in PENDING_SPEND state from a killed session
+// 2. Reconcile all proof states with mints (remove externally spent proofs)
+(async () => {
+  try {
+    const recovered = await recoverPendingProofs();
+    if (recovered > 0) {
+      console.log(`[Nutpay] Startup: recovered ${recovered} pending proofs`);
+    }
+  } catch (error) {
+    console.warn('[Nutpay] Startup: pending proof recovery failed:', error);
+  }
+
+  try {
+    const removed = await reconcileProofStates();
+    if (removed > 0) {
+      console.log(`[Nutpay] Startup: reconciled ${removed} spent proofs`);
+    }
+  } catch (error) {
+    console.warn('[Nutpay] Startup: proof reconciliation failed:', error);
+  }
+})();
+
+// Also run periodically every 5 minutes (service worker may stay alive longer)
 setInterval(() => {
   reconcileProofStates().catch((error) => {
     console.warn('[Nutpay] Proof reconciliation failed:', error);
