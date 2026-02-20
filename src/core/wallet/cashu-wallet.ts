@@ -1,6 +1,13 @@
 import { getEncodedTokenV4, getDecodedToken, type Proof, type MintQuoteResponse, type MeltQuoteResponse } from '@cashu/cashu-ts';
 import { getWalletForMint, discoverMint, findMintForPayment } from './mint-manager';
-import { selectProofs, storeProofs, spendProofs, getBalanceByMint } from './proof-manager';
+import {
+  selectProofs,
+  storeProofs,
+  getBalanceByMint,
+  markProofsPendingSpend,
+  finalizePendingSpend,
+  revertPendingProofs,
+} from './proof-manager';
 import { addTransaction, updateTransactionStatus } from '../storage/transaction-store';
 import { addPendingMintQuote, updateMintQuoteStatus, getPendingMintQuoteByQuoteId } from '../storage/pending-quote-store';
 import { addPendingToken, updatePendingTokenStatus } from '../storage/pending-token-store';
@@ -95,25 +102,37 @@ export async function createPaymentToken(
   });
 
   try {
+    // Mark proofs as PENDING_SPEND before sending to mint.
+    // If the service worker dies after the mint accepts but before cleanup,
+    // reconciliation will detect them as spent and remove them.
+    await markProofsPendingSpend(selection.proofs);
+
     // Create the send token using v3 ops API
     const seedExists = await hasSeed();
     let sendProofs: Proof[];
     let changeProofs: Proof[];
 
-    if (seedExists) {
-      // Use deterministic secrets (NUT-13)
-      const result = await wallet.ops
-        .send(amount, selection.proofs)
-        .asDeterministic(0) // Auto-reserve counters
-        .includeFees(true)
-        .run();
-      sendProofs = result.send;
-      changeProofs = result.keep;
-    } else {
-      // Legacy: random secrets
-      const result = await wallet.send(amount, selection.proofs, { includeFees: true });
-      sendProofs = result.send;
-      changeProofs = result.keep;
+    try {
+      if (seedExists) {
+        // Use deterministic secrets (NUT-13)
+        const result = await wallet.ops
+          .send(amount, selection.proofs)
+          .asDeterministic(0) // Auto-reserve counters
+          .includeFees(true)
+          .run();
+        sendProofs = result.send;
+        changeProofs = result.keep;
+      } else {
+        // Legacy: random secrets
+        const result = await wallet.send(amount, selection.proofs, { includeFees: true });
+        sendProofs = result.send;
+        changeProofs = result.keep;
+      }
+    } catch (mintError) {
+      // Mint operation failed — proofs were NOT spent at the mint.
+      // Revert them back to LIVE so they're available again.
+      await revertPendingProofs(selection.proofs);
+      throw mintError;
     }
 
     // Encode the token
@@ -122,12 +141,8 @@ export async function createPaymentToken(
       proofs: sendProofs,
     });
 
-    // Update storage: remove spent proofs, add change
-    await spendProofs(selection.proofs);
-
-    if (changeProofs.length > 0) {
-      await storeProofs(changeProofs, actualMint);
-    }
+    // Atomically remove spent proofs and add change in one storage write
+    await finalizePendingSpend(selection.proofs, changeProofs, actualMint);
 
     // Mark transaction as completed
     await updateTransactionStatus(transaction.id, 'completed');
@@ -411,25 +426,34 @@ export async function generateSendToken(
       selection = reselection;
     }
 
+    // Mark proofs as PENDING_SPEND before sending to mint
+    await markProofsPendingSpend(selection.proofs);
+
     // Create send proofs using v3 ops API
     const seedExists = await hasSeed();
     let sendProofs: Proof[];
     let changeProofs: Proof[];
 
-    if (seedExists) {
-      // Use deterministic secrets (NUT-13)
-      const result = await wallet.ops
-        .send(amount, selection.proofs)
-        .asDeterministic(0)
-        .includeFees(true)
-        .run();
-      sendProofs = result.send;
-      changeProofs = result.keep;
-    } else {
-      // Legacy: random secrets
-      const result = await wallet.send(amount, selection.proofs, { includeFees: true });
-      sendProofs = result.send;
-      changeProofs = result.keep;
+    try {
+      if (seedExists) {
+        // Use deterministic secrets (NUT-13)
+        const result = await wallet.ops
+          .send(amount, selection.proofs)
+          .asDeterministic(0)
+          .includeFees(true)
+          .run();
+        sendProofs = result.send;
+        changeProofs = result.keep;
+      } else {
+        // Legacy: random secrets
+        const result = await wallet.send(amount, selection.proofs, { includeFees: true });
+        sendProofs = result.send;
+        changeProofs = result.keep;
+      }
+    } catch (mintError) {
+      // Mint operation failed — revert proofs back to LIVE
+      await revertPendingProofs(selection.proofs);
+      throw mintError;
     }
 
     // Encode the token
@@ -452,11 +476,8 @@ export async function generateSendToken(
     };
     await addPendingToken(pendingToken);
 
-    // Update storage
-    await spendProofs(selection.proofs);
-    if (changeProofs.length > 0) {
-      await storeProofs(changeProofs, normalizedUrl);
-    }
+    // Atomically remove spent proofs and add change in one storage write
+    await finalizePendingSpend(selection.proofs, changeProofs, normalizedUrl);
 
     // Record transaction with token for recovery
     await addTransaction({
@@ -578,8 +599,68 @@ export async function payLightningInvoice(
     };
     await addPendingToken(pendingToken);
 
-    // Perform the melt
-    const meltResponse = await wallet.meltProofs(meltQuote, selection.proofs);
+    // Mark proofs as PENDING_SPEND before sending to mint
+    await markProofsPendingSpend(selection.proofs);
+
+    // Perform the melt using ops builder for deterministic change secrets (NUT-13)
+    let meltResponse: Awaited<ReturnType<typeof wallet.meltProofs>>;
+    try {
+      const seedExists = await hasSeed();
+      if (seedExists) {
+        // Use ops builder with deterministic secrets so change proofs are recoverable from seed
+        meltResponse = await wallet.ops
+          .meltBolt11(meltQuote, selection.proofs)
+          .asDeterministic(0)
+          .run();
+      } else {
+        // Legacy: random secrets
+        meltResponse = await wallet.meltProofs(meltQuote, selection.proofs);
+      }
+    } catch (meltError) {
+      // The mint call threw — but the melt may have actually succeeded.
+      // Check the quote status to determine what really happened.
+      try {
+        const quoteStatus = await wallet.checkMeltQuote(quoteId);
+
+        if (quoteStatus.state === 'PAID') {
+          // Melt actually succeeded! The error was just a network issue on the response.
+          // Proofs are spent at the mint — finalize the spend.
+          // Note: checkMeltQuote returns blinded signatures, not unblinded proofs,
+          // so we can't recover change here. With deterministic secrets (NUT-13),
+          // the change is recoverable via seed recovery. Without, it's lost.
+          await finalizePendingSpend(selection.proofs, [], normalizedUrl);
+          await updatePendingTokenStatus(pendingToken.id, 'claimed');
+          meltQuoteCache.delete(quoteId);
+
+          await addTransaction({
+            type: 'payment',
+            amount: selection.total,
+            unit: 'sat',
+            mintUrl: normalizedUrl,
+            origin: 'Lightning Send',
+            status: 'completed',
+          });
+
+          return {
+            success: true,
+            preimage: quoteStatus.payment_preimage || undefined,
+            change: 0,
+          };
+        }
+
+        // Quote is UNPAID — melt truly failed. Revert proofs.
+        await revertPendingProofs(selection.proofs);
+      } catch {
+        // Can't even check the quote — leave proofs as PENDING_SPEND.
+        // Reconciliation on next startup will determine their actual state.
+        console.warn('[Nutpay] Could not check melt quote status after error, proofs left as PENDING_SPEND');
+      }
+
+      return {
+        success: false,
+        error: meltError instanceof Error ? meltError.message : 'Failed to pay Lightning invoice',
+      };
+    }
 
     // Mark pending token as claimed
     await updatePendingTokenStatus(pendingToken.id, 'claimed');
@@ -587,15 +668,11 @@ export async function payLightningInvoice(
     // Clean up cache
     meltQuoteCache.delete(quoteId);
 
-    // Update storage
-    await spendProofs(selection.proofs);
+    // Atomically remove spent proofs and add change in one storage write
+    const changeProofs = meltResponse.change || [];
+    await finalizePendingSpend(selection.proofs, changeProofs, normalizedUrl);
 
-    // Store any change proofs returned
-    if (meltResponse.change && meltResponse.change.length > 0) {
-      await storeProofs(meltResponse.change, normalizedUrl);
-    }
-
-    const changeAmount = meltResponse.change?.reduce((sum, p) => sum + p.amount, 0) || 0;
+    const changeAmount = changeProofs.reduce((sum, p) => sum + p.amount, 0);
     const actualSpent = selection.total - changeAmount;
 
     // Record transaction

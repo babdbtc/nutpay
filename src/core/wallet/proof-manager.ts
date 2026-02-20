@@ -6,6 +6,10 @@ import {
   removeProofs,
   getBalanceByMint,
   getTotalBalance,
+  markProofsPendingSpend,
+  finalizePendingSpend,
+  getPendingSpendProofs,
+  revertPendingProofs,
 } from '../storage/proof-store';
 import { getWalletForMint } from './mint-manager';
 
@@ -184,5 +188,60 @@ export async function reconcileProofStates(): Promise<number> {
   return removedCount;
 }
 
-// Re-export balance functions
-export { getBalanceByMint, getTotalBalance, getProofs, getProofsForMint };
+// Recover pending proofs left over from a killed service worker.
+// Checks each PENDING_SPEND proof against the mint via NUT-07:
+// - If spent at mint → remove from storage (mint has them)
+// - If unspent at mint → revert to LIVE (operation didn't complete)
+export async function recoverPendingProofs(): Promise<number> {
+  const pendingStored = await getPendingSpendProofs();
+  if (pendingStored.length === 0) return 0;
+
+  console.log(`[Nutpay] Recovering ${pendingStored.length} pending-spend proofs...`);
+
+  // Group by mint
+  const byMint = new Map<string, typeof pendingStored>();
+  for (const sp of pendingStored) {
+    const existing = byMint.get(sp.mintUrl) || [];
+    existing.push(sp);
+    byMint.set(sp.mintUrl, existing);
+  }
+
+  let recoveredCount = 0;
+
+  for (const [mintUrl, storedProofs] of byMint) {
+    try {
+      const wallet = await getWalletForMint(mintUrl);
+      const proofs = storedProofs.map((sp) => sp.proof);
+
+      const { spent, unspent } = await wallet.groupProofsByState(proofs);
+
+      // Spent at mint → remove from storage (the operation succeeded)
+      if (spent.length > 0) {
+        await removeProofs(spent);
+        console.log(`[Nutpay] Removed ${spent.length} confirmed-spent pending proofs from ${mintUrl}`);
+      }
+
+      // Unspent at mint → revert to LIVE (the operation failed or never reached mint)
+      if (unspent.length > 0) {
+        await revertPendingProofs(unspent);
+        recoveredCount += unspent.length;
+        console.log(`[Nutpay] Reverted ${unspent.length} unspent pending proofs to LIVE for ${mintUrl}`);
+      }
+    } catch (error) {
+      console.warn(`[Nutpay] Failed to recover pending proofs for ${mintUrl}:`, error);
+    }
+  }
+
+  return recoveredCount;
+}
+
+// Re-export balance functions and pending operations
+export {
+  getBalanceByMint,
+  getTotalBalance,
+  getProofs,
+  getProofsForMint,
+  markProofsPendingSpend,
+  finalizePendingSpend,
+  revertPendingProofs,
+};
