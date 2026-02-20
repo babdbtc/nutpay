@@ -1,4 +1,4 @@
-import { Wallet, type Proof } from '@cashu/cashu-ts';
+import { Wallet, Mint, type Proof, type MintKeyset } from '@cashu/cashu-ts';
 import { storeProofs } from './proof-manager';
 import { setCounters, type KeysetCounters } from '../storage/counter-store';
 import { storeSeed } from '../storage/seed-store';
@@ -6,9 +6,8 @@ import type { RecoveryProgress, RecoveryResult } from '../../shared/types';
 import { normalizeMintUrl } from '../../shared/format';
 
 // Recovery configuration
-const BATCH_SIZE = 100; // How many counters to check at once
-const EMPTY_BATCHES_BEFORE_STOP = 3; // Stop after this many consecutive empty batches
-const MAX_COUNTER = 10000; // Safety limit
+const GAP_LIMIT = 3; // Stop after this many consecutive empty batches
+const BATCH_SIZE = 100; // How many counters to check per batch
 
 // In-memory recovery state
 let recoveryInProgress = false;
@@ -37,8 +36,9 @@ export function cancelRecovery(): void {
 }
 
 /**
- * Recover wallet from a BIP39 seed
- * Scans all provided mints for proofs derived from the seed
+ * Recover wallet from a BIP39 seed.
+ * Scans all provided mints for proofs derived from the seed,
+ * including both active and inactive keysets.
  */
 export async function recoverFromSeed(
   seed: Uint8Array,
@@ -124,9 +124,9 @@ export async function recoverFromSeed(
     if (results.totalRecovered > 0 || results.errors.length === 0) {
       await storeSeed(seed);
 
-      // Update counters (add buffer for safety)
+      // Update counters with safety buffer to avoid reuse
       for (const keysetId of Object.keys(finalCounters)) {
-        finalCounters[keysetId] += 10; // Buffer to avoid reuse
+        finalCounters[keysetId] += GAP_LIMIT * BATCH_SIZE;
       }
       await setCounters(finalCounters);
     }
@@ -140,7 +140,8 @@ export async function recoverFromSeed(
 }
 
 /**
- * Recover proofs from a single mint
+ * Recover proofs from a single mint.
+ * Scans ALL keysets (active + inactive) for the wallet's unit.
  */
 async function recoverFromMint(
   seed: Uint8Array,
@@ -151,66 +152,69 @@ async function recoverFromMint(
   amount: number;
   counters: KeysetCounters;
 }> {
-  // Create a wallet with the seed for recovery
+  // First, get all keysets from the mint (including inactive ones)
+  const mint = new Mint(mintUrl);
+  const { keysets: allKeysets } = await mint.getKeySets();
+
+  // Filter to keysets matching our unit (sat)
+  const relevantKeysets = allKeysets.filter((ks: MintKeyset) => ks.unit === 'sat');
+
+  if (relevantKeysets.length === 0) {
+    return { proofs: [], amount: 0, counters: {} };
+  }
+
+  // Create a wallet with the seed
   const wallet = new Wallet(mintUrl, {
     unit: 'sat',
     bip39seed: seed,
   });
-
   await wallet.loadMint();
 
   const recoveredProofs: Proof[] = [];
   const keysetCounters: KeysetCounters = {};
-  let emptyBatches = 0;
-  let counter = 0;
 
-  while (emptyBatches < EMPTY_BATCHES_BEFORE_STOP && counter < MAX_COUNTER) {
-    if (recoveryCancelled) {
-      break;
-    }
+  // Scan each keyset separately (active + inactive)
+  for (const keyset of relevantKeysets) {
+    if (recoveryCancelled) break;
 
     onProgress({
-      currentCounter: counter,
       status: 'scanning',
+      currentCounter: 0,
     });
 
     try {
-      // Use NUT-09 restore endpoint to check for proofs at these counters
-      const { proofs } = await wallet.restore(counter, BATCH_SIZE);
+      // Use batchRestore for this specific keyset
+      // This handles the batch loop, gap detection, and counter tracking
+      const { proofs, lastCounterWithSignature } = await wallet.batchRestore(
+        GAP_LIMIT,
+        BATCH_SIZE,
+        0, // Start from counter 0
+        keyset.id
+      );
 
       if (proofs.length > 0) {
         // Check which proofs are still unspent using NUT-07
-        const unspentProofs = await checkUnspentProofs(wallet, proofs);
+        const unspent = await checkUnspentProofs(wallet, proofs);
 
-        if (unspentProofs.length > 0) {
-          recoveredProofs.push(...unspentProofs);
+        if (unspent.length > 0) {
+          recoveredProofs.push(...unspent);
+
+          // Track the highest counter for this keyset
+          if (lastCounterWithSignature !== undefined) {
+            keysetCounters[keyset.id] = lastCounterWithSignature + 1;
+          }
 
           onProgress({
             proofsFound: recoveredProofs.length,
             totalAmount: recoveredProofs.reduce((sum, p) => sum + p.amount, 0),
             status: 'found',
           });
-
-          // Track the highest counter used per keyset
-          for (const proof of unspentProofs) {
-            const keysetId = proof.id;
-            if (!keysetCounters[keysetId] || counter + BATCH_SIZE > keysetCounters[keysetId]) {
-              keysetCounters[keysetId] = counter + BATCH_SIZE;
-            }
-          }
         }
-
-        emptyBatches = 0; // Reset empty batch counter
-      } else {
-        emptyBatches++;
       }
     } catch (error) {
-      // Some mints might not support restore, skip to next batch
-      console.warn(`[Nutpay] Restore batch failed at counter ${counter}:`, error);
-      emptyBatches++;
+      // Log but continue with other keysets
+      console.warn(`[Nutpay] Failed to restore keyset ${keyset.id}:`, error);
     }
-
-    counter += BATCH_SIZE;
   }
 
   const totalAmount = recoveredProofs.reduce((sum, p) => sum + p.amount, 0);
@@ -227,7 +231,6 @@ async function recoverFromMint(
  */
 async function checkUnspentProofs(wallet: Wallet, proofs: Proof[]): Promise<Proof[]> {
   try {
-    // Use groupProofsByState which returns { unspent, pending, spent }
     const { unspent } = await wallet.groupProofsByState(proofs);
     return unspent;
   } catch (error) {
@@ -238,8 +241,8 @@ async function checkUnspentProofs(wallet: Wallet, proofs: Proof[]): Promise<Proo
 }
 
 /**
- * Quick balance check without full recovery
- * Useful for verifying a seed has funds before full recovery
+ * Quick balance check without full recovery.
+ * Useful for verifying a seed has funds before full recovery.
  */
 export async function checkSeedBalance(
   seed: Uint8Array,
@@ -253,30 +256,25 @@ export async function checkSeedBalance(
 
   for (const mintUrl of mintUrls) {
     try {
-      const wallet = new Wallet(normalizeMintUrl(mintUrl), {
+      const normalizedUrl = normalizeMintUrl(mintUrl);
+      const wallet = new Wallet(normalizedUrl, {
         unit: 'sat',
         bip39seed: seed,
       });
 
       await wallet.loadMint();
 
-      // Just check first few batches for a quick estimate
-      let balance = 0;
-      for (let counter = 0; counter < 300; counter += BATCH_SIZE) {
-        try {
-          const { proofs } = await wallet.restore(counter, BATCH_SIZE);
-          if (proofs.length > 0) {
-            const unspent = await checkUnspentProofs(wallet, proofs);
-            balance += unspent.reduce((sum, p) => sum + p.amount, 0);
-          }
-        } catch {
-          break;
-        }
-      }
+      // Quick scan: just the first few batches with the default keyset
+      const { proofs } = await wallet.batchRestore(2, BATCH_SIZE);
 
-      if (balance > 0) {
-        mintBalances.push({ mintUrl: normalizeMintUrl(mintUrl), balance });
-        totalBalance += balance;
+      if (proofs.length > 0) {
+        const unspent = await checkUnspentProofs(wallet, proofs);
+        const balance = unspent.reduce((sum, p) => sum + p.amount, 0);
+
+        if (balance > 0) {
+          mintBalances.push({ mintUrl: normalizedUrl, balance });
+          totalBalance += balance;
+        }
       }
     } catch (error) {
       console.warn(`[Nutpay] Failed to check ${mintUrl}:`, error);

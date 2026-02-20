@@ -509,6 +509,15 @@ setInterval(() => {
   cleanupOldPendingTokens();
 }, 60000);
 
+// Periodic proof state reconciliation (NUT-07) every 5 minutes
+// Removes proofs that were spent externally or in failed transactions
+import { reconcileProofStates } from '../core/wallet/proof-manager';
+setInterval(() => {
+  reconcileProofStates().catch((error) => {
+    console.warn('[Nutpay] Proof reconciliation failed:', error);
+  });
+}, 5 * 60 * 1000);
+
 // Install handler
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {

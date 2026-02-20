@@ -16,48 +16,72 @@ export interface PaymentResult {
   transactionId?: string;
 }
 
-// Create a payment token for a 402 response
+// Create a payment token for a NUT-24 402 payment
 export async function createPaymentToken(
   paymentRequest: XCashuPaymentRequest,
   origin: string
 ): Promise<PaymentResult> {
-  const { mint: requestedMint, amount, unit } = paymentRequest;
-  const normalizedRequestedMint = normalizeMintUrl(requestedMint);
+  const { mints: acceptedMints, amount, unit } = paymentRequest;
 
-  // Find a mint that can fulfill this payment
-  const mintUrl = await findMintForPayment(normalizedRequestedMint, amount);
+  // Find the first accepted mint we can pay from
+  let actualMint: string | null = null;
 
-  if (!mintUrl) {
-    // Try to discover the mint
-    const discovered = await discoverMint(normalizedRequestedMint);
-    if (!discovered) {
-      return {
-        success: false,
-        error: `Mint not available: ${normalizedRequestedMint}`,
-      };
+  for (const requestedMint of acceptedMints) {
+    const normalizedMint = normalizeMintUrl(requestedMint);
+    const mintUrl = await findMintForPayment(normalizedMint, amount);
+
+    if (mintUrl) {
+      actualMint = mintUrl;
+      break;
+    }
+
+    // Try to discover the mint if not known
+    const discovered = await discoverMint(normalizedMint);
+    if (discovered) {
+      actualMint = normalizedMint;
+      break;
     }
   }
 
-  const actualMint = mintUrl || normalizedRequestedMint;
+  if (!actualMint) {
+    const mintNames = acceptedMints.map((m) => {
+      try { return new URL(m).hostname; } catch { return m; }
+    }).join(', ');
+    return {
+      success: false,
+      error: `No available mint from: ${mintNames}`,
+    };
+  }
 
   // Get wallet for this mint
   const wallet = await getWalletForMint(actualMint);
 
-  // Estimate fees - fees are typically per proof used in the swap
-  // Most mints charge 0-2 sats per proof, we'll add a buffer based on amount
-  const estimatedProofs = Math.ceil(Math.log2(amount + 1)) + 1;
-  const estimatedFee = Math.max(1, estimatedProofs);
-  const amountWithFees = amount + estimatedFee;
-
-  // Select proofs for the payment including fees
-  const selection = await selectProofs(actualMint, amountWithFees);
-
-  if (!selection) {
+  // Select proofs first, then calculate actual fees from the mint's fee schedule (NUT-02)
+  const initialSelection = await selectProofs(actualMint, amount);
+  if (!initialSelection) {
     const balance = (await getBalanceByMint()).get(actualMint) || 0;
     return {
       success: false,
-      error: `Insufficient funds. Need ${amountWithFees} ${unit} (${amount} + ~${estimatedFee} fee), have ${balance} ${unit}`,
+      error: `Insufficient funds. Need ${amount} ${unit}, have ${balance} ${unit}`,
     };
+  }
+
+  // Calculate actual fees based on the selected proofs and mint's fee schedule
+  const fee = wallet.getFeesForProofs(initialSelection.proofs);
+  const amountWithFees = amount + fee;
+
+  // Re-select proofs if we need more to cover fees
+  let selection = initialSelection;
+  if (selection.total < amountWithFees) {
+    const reselection = await selectProofs(actualMint, amountWithFees);
+    if (!reselection) {
+      const balance = (await getBalanceByMint()).get(actualMint) || 0;
+      return {
+        success: false,
+        error: `Insufficient funds. Need ${amountWithFees} ${unit} (${amount} + ${fee} fee), have ${balance} ${unit}`,
+      };
+    }
+    selection = reselection;
   }
 
   // Create transaction record
@@ -125,7 +149,7 @@ export async function createPaymentToken(
   }
 }
 
-// Receive a Cashu token (e.g., from NWC or manual input)
+// Receive a Cashu token (e.g., from manual input or clipboard)
 export async function receiveToken(encodedToken: string): Promise<{
   success: boolean;
   amount?: number;
@@ -361,19 +385,30 @@ export async function generateSendToken(
     const normalizedUrl = normalizeMintUrl(mintUrl);
     const wallet = await getWalletForMint(normalizedUrl);
 
-    // Estimate fees for the swap operation
-    const estimatedProofs = Math.ceil(Math.log2(amount + 1)) + 1;
-    const estimatedFee = Math.max(1, estimatedProofs);
-    const amountWithFees = amount + estimatedFee;
-
-    const selection = await selectProofs(normalizedUrl, amountWithFees);
-
-    if (!selection) {
+    // Select proofs first, then calculate actual fees from the mint's fee schedule (NUT-02)
+    const initialSelection = await selectProofs(normalizedUrl, amount);
+    if (!initialSelection) {
       const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
       return {
         success: false,
-        error: `Insufficient funds. Need ~${amountWithFees} sats (${amount} + ~${estimatedFee} fee), have ${balance} sats`,
+        error: `Insufficient funds. Need ${amount} sats, have ${balance} sats`,
       };
+    }
+
+    const fee = wallet.getFeesForProofs(initialSelection.proofs);
+    const amountWithFees = amount + fee;
+
+    let selection = initialSelection;
+    if (selection.total < amountWithFees) {
+      const reselection = await selectProofs(normalizedUrl, amountWithFees);
+      if (!reselection) {
+        const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
+        return {
+          success: false,
+          error: `Insufficient funds. Need ${amountWithFees} sats (${amount} + ${fee} fee), have ${balance} sats`,
+        };
+      }
+      selection = reselection;
     }
 
     // Create send proofs using v3 ops API

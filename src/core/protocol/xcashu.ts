@@ -1,64 +1,72 @@
+import { PaymentRequest } from '@cashu/cashu-ts';
 import type { XCashuPaymentRequest } from '../../shared/types';
-import { XCASHU_HEADER, DEFAULT_UNIT } from '../../shared/constants';
+import { XCASHU_HEADER } from '../../shared/constants';
 
-// Parse a 402 response body to extract payment requirements
-export function parsePaymentRequest(
-  body: string
+/**
+ * Decode a NUT-18 encoded payment request (creqA... string) from an X-Cashu header.
+ * Returns our internal XCashuPaymentRequest format.
+ */
+export function decodePaymentRequestHeader(
+  headerValue: string
 ): XCashuPaymentRequest | null {
   try {
-    const parsed = JSON.parse(body);
+    const pr = PaymentRequest.fromEncodedRequest(headerValue.trim());
 
-    // Validate required fields
-    if (!parsed.mint || typeof parsed.mint !== 'string') {
-      return null;
-    }
-
-    if (!parsed.amount || typeof parsed.amount !== 'number') {
+    if (!pr.amount || !pr.unit) {
       return null;
     }
 
     return {
-      mint: parsed.mint,
-      amount: parsed.amount,
-      unit: parsed.unit || DEFAULT_UNIT,
+      mints: pr.mints || [],
+      amount: pr.amount,
+      unit: pr.unit,
+      id: pr.id || undefined,
+      description: pr.description || undefined,
+      singleUse: pr.singleUse || undefined,
     };
-  } catch {
-    // Try parsing as plain text format: "mint=xxx amount=xxx unit=xxx"
-    return parseTextFormat(body);
-  }
-}
-
-// Parse text format payment request
-function parseTextFormat(body: string): XCashuPaymentRequest | null {
-  const mintMatch = body.match(/mint[=:]\s*([^\s,]+)/i);
-  const amountMatch = body.match(/amount[=:]\s*(\d+)/i);
-  const unitMatch = body.match(/unit[=:]\s*([^\s,]+)/i);
-
-  if (!mintMatch || !amountMatch) {
+  } catch (error) {
+    console.warn('[Nutpay] Failed to decode NUT-18 payment request:', error);
     return null;
   }
-
-  return {
-    mint: mintMatch[1],
-    amount: parseInt(amountMatch[1], 10),
-    unit: unitMatch?.[1] || DEFAULT_UNIT,
-  };
 }
 
-// Check if a response is a 402 with X-Cashu payment requirements
-export function is402PaymentRequired(
-  status: number,
-  body: string
-): boolean {
-  if (status !== 402) {
-    return false;
+/**
+ * Validate a payment request has the required fields and sensible values.
+ */
+export function validatePaymentRequest(
+  request: XCashuPaymentRequest
+): { valid: boolean; error?: string } {
+  if (!request.mints || request.mints.length === 0) {
+    return { valid: false, error: 'No accepted mints specified' };
   }
 
-  const request = parsePaymentRequest(body);
-  return request !== null;
+  // Validate all mint URLs
+  for (const mint of request.mints) {
+    try {
+      new URL(mint);
+    } catch {
+      return { valid: false, error: `Invalid mint URL: ${mint}` };
+    }
+  }
+
+  if (!request.amount || request.amount <= 0) {
+    return { valid: false, error: 'Invalid amount' };
+  }
+
+  if (request.amount > 1_000_000) {
+    return { valid: false, error: 'Amount too large (max 1,000,000 sats)' };
+  }
+
+  if (!request.unit) {
+    return { valid: false, error: 'Missing unit' };
+  }
+
+  return { valid: true };
 }
 
-// Build headers with X-Cashu token for retry request
+/**
+ * Build headers with X-Cashu token for the retry request.
+ */
 export function buildPaymentHeaders(
   originalHeaders: Record<string, string>,
   token: string
@@ -69,40 +77,27 @@ export function buildPaymentHeaders(
   };
 }
 
-// Extract X-Cashu token from request headers
+/**
+ * Extract X-Cashu token from request headers.
+ */
 export function extractPaymentToken(
   headers: Record<string, string>
 ): string | null {
   return headers[XCASHU_HEADER] || headers[XCASHU_HEADER.toLowerCase()] || null;
 }
 
-// Validate a payment request
-export function validatePaymentRequest(
-  request: XCashuPaymentRequest
-): { valid: boolean; error?: string } {
-  if (!request.mint) {
-    return { valid: false, error: 'Missing mint URL' };
-  }
-
-  try {
-    new URL(request.mint);
-  } catch {
-    return { valid: false, error: 'Invalid mint URL' };
-  }
-
-  if (!request.amount || request.amount <= 0) {
-    return { valid: false, error: 'Invalid amount' };
-  }
-
-  if (request.amount > 1000000) {
-    return { valid: false, error: 'Amount too large (max 1,000,000 sats)' };
-  }
-
-  return { valid: true };
-}
-
-// Format payment request for display
+/**
+ * Format payment request for display.
+ */
 export function formatPaymentRequest(request: XCashuPaymentRequest): string {
-  const mintHost = new URL(request.mint).hostname;
-  return `${request.amount} ${request.unit} via ${mintHost}`;
+  const mintHosts = request.mints
+    .map((m) => {
+      try {
+        return new URL(m).hostname;
+      } catch {
+        return m;
+      }
+    })
+    .join(', ');
+  return `${request.amount} ${request.unit} via ${mintHosts}`;
 }

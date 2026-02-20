@@ -25,7 +25,6 @@ export const PRESET_MINTS: MintConfig[] = [
 // Default settings
 export const DEFAULT_SETTINGS: Settings = {
   alwaysAsk: true,
-  preferredWallet: 'builtin',
   autoDiscoverMints: true,
   displayFormat: 'symbol', // Default to ₿ symbol
   theme: 'classic',

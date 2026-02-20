@@ -1,15 +1,10 @@
-// This script is injected into the page context to intercept fetch/XHR
-// It communicates with the content script via window.postMessage
-
-interface CashuPaymentInfo {
-  mint: string;
-  amount: number;
-  unit: string;
-}
+// This script is injected into the page context to intercept fetch requests.
+// It detects HTTP 402 responses with X-Cashu headers (NUT-24) and communicates
+// with the content script via window.postMessage to handle payments.
 
 interface PendingRequest {
   resolve: (value: Response) => void;
-  reject: (error: Error) => void;
+  originalResponse: Response; // The original 402 response (for fallback)
   originalRequest: {
     url: string;
     method: string;
@@ -20,6 +15,8 @@ interface PendingRequest {
 
 const MESSAGE_TO_CONTENT = 'nutpay_to_content';
 const MESSAGE_FROM_CONTENT = 'nutpay_from_content';
+const XCASHU_HEADER = 'X-Cashu';
+const PAYMENT_TIMEOUT_MS = 60_000;
 
 // Map of pending requests waiting for payment
 const pendingRequests = new Map<string, PendingRequest>();
@@ -27,34 +24,6 @@ const pendingRequests = new Map<string, PendingRequest>();
 // Generate unique request ID
 function generateRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-// Parse 402 response body for payment requirements
-function parsePaymentInfo(body: string): CashuPaymentInfo | null {
-  try {
-    const parsed = JSON.parse(body);
-    if (parsed.mint && parsed.amount) {
-      return {
-        mint: parsed.mint,
-        amount: parsed.amount,
-        unit: parsed.unit || 'sat',
-      };
-    }
-  } catch {
-    // Try text format
-    const mintMatch = body.match(/mint[=:]\s*([^\s,]+)/i);
-    const amountMatch = body.match(/amount[=:]\s*(\d+)/i);
-    const unitMatch = body.match(/unit[=:]\s*([^\s,]+)/i);
-
-    if (mintMatch && amountMatch) {
-      return {
-        mint: mintMatch[1],
-        amount: parseInt(amountMatch[1], 10),
-        unit: unitMatch?.[1] || 'sat',
-      };
-    }
-  }
-  return null;
 }
 
 // Send message to content script
@@ -68,37 +37,34 @@ window.addEventListener('message', (event) => {
   if (event.data?.source !== MESSAGE_FROM_CONTENT) return;
 
   const message = event.data.payload;
-  console.log('[Nutpay Inject] Received from content script:', message);
 
   if (message.type === 'PAYMENT_TOKEN') {
     const pending = pendingRequests.get(message.requestId);
     if (pending) {
-      // Retry the request with the payment token
       retryWithPayment(message.requestId, message.token);
     }
   } else if (message.type === 'PAYMENT_DENIED' || message.type === 'PAYMENT_FAILED') {
     const pending = pendingRequests.get(message.requestId);
     if (pending) {
       pendingRequests.delete(message.requestId);
-      // Return the original 402 response
-      // We can't actually do this, so we reject
-      pending.reject(new Error(message.reason || message.error || 'Payment failed'));
+      // Return the original 402 response instead of throwing an error
+      pending.resolve(pending.originalResponse);
     }
   }
 });
 
-// Retry a request with the payment token
+// Retry a request with the payment token in X-Cashu header
 async function retryWithPayment(requestId: string, token: string): Promise<void> {
   const pending = pendingRequests.get(requestId);
   if (!pending) return;
 
   pendingRequests.delete(requestId);
-  const { originalRequest, resolve, reject } = pending;
+  const { originalRequest, resolve } = pending;
 
   try {
     const headers = {
       ...originalRequest.headers,
-      'X-Cashu': token,
+      [XCASHU_HEADER]: token,
     };
 
     const response = await originalFetch(originalRequest.url, {
@@ -108,184 +74,91 @@ async function retryWithPayment(requestId: string, token: string): Promise<void>
     });
 
     resolve(response);
-  } catch (error) {
-    reject(error instanceof Error ? error : new Error(String(error)));
+  } catch {
+    // If retry fails, return original 402 response
+    resolve(pending.originalResponse);
   }
 }
 
-// Store original fetch
+// Store original fetch before overriding
 const originalFetch = window.fetch;
 
-// Override fetch
+// Override fetch to intercept 402 responses with X-Cashu headers (NUT-24)
 window.fetch = async function (
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
   const response = await originalFetch(input, init);
 
-  // Check for 402 response
-  console.log('[Nutpay Inject] Response status:', response.status);
-  if (response.status === 402) {
-    console.log('[Nutpay Inject] Got 402 response!');
-    const clonedResponse = response.clone();
-    const body = await clonedResponse.text();
-    console.log('[Nutpay Inject] Body:', body);
-    const paymentInfo = parsePaymentInfo(body);
-    console.log('[Nutpay Inject] Parsed payment info:', paymentInfo);
+  // Only intercept 402 Payment Required responses
+  if (response.status !== 402) {
+    return response;
+  }
 
-    if (paymentInfo) {
-      console.log('[Nutpay Inject] Sending PAYMENT_REQUIRED to content script...');
-      const requestId = generateRequestId();
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  // Check for X-Cashu header containing a NUT-18 payment request (creqA...)
+  const xcashuHeader = response.headers.get(XCASHU_HEADER);
+  if (!xcashuHeader) {
+    return response;
+  }
 
-      // Extract headers from init
-      const headers: Record<string, string> = {};
-      if (init?.headers) {
-        if (init.headers instanceof Headers) {
-          init.headers.forEach((value, key) => {
-            headers[key] = value;
-          });
-        } else if (Array.isArray(init.headers)) {
-          init.headers.forEach(([key, value]) => {
-            headers[key] = value;
-          });
-        } else {
-          Object.assign(headers, init.headers);
-        }
-      }
+  const requestId = generateRequestId();
+  const url = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url;
 
-      // Create a promise that will be resolved when payment completes
-      return new Promise((resolve, reject) => {
-        pendingRequests.set(requestId, {
-          resolve,
-          reject,
-          originalRequest: {
-            url,
-            method: init?.method || 'GET',
-            headers,
-            body: typeof init?.body === 'string' ? init.body : null,
-          },
-        });
-
-        // Send payment required message to content script
-        const msg = {
-          type: 'PAYMENT_REQUIRED',
-          requestId,
-          url,
-          method: init?.method || 'GET',
-          headers,
-          body: typeof init?.body === 'string' ? init.body : null,
-          paymentRequest: paymentInfo,
-          origin: window.location.origin,
-        };
-        console.log('[Nutpay Inject] Sending message:', msg);
-        sendToContent(msg);
-        console.log('[Nutpay Inject] Message sent, waiting for response...');
-
-        // Set timeout
-        setTimeout(() => {
-          if (pendingRequests.has(requestId)) {
-            pendingRequests.delete(requestId);
-            // Return original response on timeout
-            resolve(response);
-          }
-        }, 60000);
+  // Extract headers from init
+  const headers: Record<string, string> = {};
+  if (init?.headers) {
+    if (init.headers instanceof Headers) {
+      init.headers.forEach((value, key) => {
+        headers[key] = value;
       });
+    } else if (Array.isArray(init.headers)) {
+      init.headers.forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    } else {
+      Object.assign(headers, init.headers);
     }
   }
 
-  return response;
+  // Create a promise that will be resolved when payment completes or is denied
+  return new Promise((resolve) => {
+    pendingRequests.set(requestId, {
+      resolve,
+      originalResponse: response,
+      originalRequest: {
+        url,
+        method: init?.method || 'GET',
+        headers,
+        body: typeof init?.body === 'string' ? init.body : null,
+      },
+    });
+
+    // Send the raw encoded payment request to the content script
+    // The background service worker will decode the creqA... NUT-18 format
+    sendToContent({
+      type: 'PAYMENT_REQUIRED',
+      requestId,
+      url,
+      method: init?.method || 'GET',
+      headers,
+      body: typeof init?.body === 'string' ? init.body : null,
+      paymentRequestEncoded: xcashuHeader,
+      origin: window.location.origin,
+    });
+
+    // Timeout: return original 402 response if payment takes too long
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId);
+        resolve(response);
+      }
+    }, PAYMENT_TIMEOUT_MS);
+  });
 };
 
-// Store original XMLHttpRequest
-const OriginalXHR = window.XMLHttpRequest;
-
-// Override XMLHttpRequest
-class InterceptedXHR extends OriginalXHR {
-  private _url: string = '';
-  private _method: string = 'GET';
-  private _headers: Record<string, string> = {};
-  private _body: string | null = null;
-  private _requestId: string | null = null;
-
-  open(method: string, url: string | URL, async?: boolean, user?: string | null, password?: string | null): void {
-    this._method = method;
-    this._url = url.toString();
-    super.open(method, url, async ?? true, user, password);
-  }
-
-  setRequestHeader(name: string, value: string): void {
-    this._headers[name] = value;
-    super.setRequestHeader(name, value);
-  }
-
-  send(body?: Document | XMLHttpRequestBodyInit | null): void {
-    this._body = typeof body === 'string' ? body : null;
-
-    const originalOnReadyStateChange = this.onreadystatechange;
-
-    this.onreadystatechange = (ev: Event) => {
-      if (this.readyState === 4 && this.status === 402) {
-        const paymentInfo = parsePaymentInfo(this.responseText);
-
-        if (paymentInfo && !this._requestId) {
-          this._requestId = generateRequestId();
-
-          // Store reference for retry
-          const xhr = this;
-
-          pendingRequests.set(this._requestId, {
-            resolve: (response: Response) => {
-              // XHR doesn't have a clean way to replace response
-              // We'll dispatch a custom event instead
-              response.text().then((text) => {
-                const event = new CustomEvent('nutpay_xhr_complete', {
-                  detail: { requestId: xhr._requestId, response: text, status: response.status },
-                });
-                window.dispatchEvent(event);
-              });
-            },
-            reject: () => {
-              // Let original response through
-              if (originalOnReadyStateChange) {
-                originalOnReadyStateChange.call(this, ev);
-              }
-            },
-            originalRequest: {
-              url: this._url,
-              method: this._method,
-              headers: this._headers,
-              body: this._body,
-            },
-          });
-
-          // Send payment required message
-          sendToContent({
-            type: 'PAYMENT_REQUIRED',
-            requestId: this._requestId,
-            url: this._url,
-            method: this._method,
-            headers: this._headers,
-            body: this._body,
-            paymentRequest: paymentInfo,
-            origin: window.location.origin,
-          });
-
-          // Don't call original handler yet - wait for payment
-          return;
-        }
-      }
-
-      if (originalOnReadyStateChange) {
-        originalOnReadyStateChange.call(this, ev);
-      }
-    };
-
-    super.send(body);
-  }
-}
-
-window.XMLHttpRequest = InterceptedXHR as typeof XMLHttpRequest;
-
 // Signal that injection is complete
-console.log('[Nutpay] Payment interceptor initialized');
+console.log('[Nutpay] NUT-24 payment interceptor initialized');

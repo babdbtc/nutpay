@@ -550,40 +550,7 @@ function Options() {
             />
           </div>
 
-          <Separator className="bg-border" />
 
-          <div className="flex items-center justify-between py-2">
-            <div className="space-y-1">
-              <Label className="text-sm font-medium">Wallet source</Label>
-              <p className="text-xs text-muted-foreground">
-                Where to get proofs for payments
-              </p>
-            </div>
-            <Select
-              value={settings.preferredWallet}
-              onValueChange={(v) => updateSetting('preferredWallet', v as Settings['preferredWallet'])}
-            >
-              <SelectTrigger className="w-40 bg-popover border-input">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-input">
-                <SelectItem value="builtin">Built-in wallet</SelectItem>
-                <SelectItem value="nwc">Nostr Wallet Connect</SelectItem>
-                <SelectItem value="nip60">NIP-60 Wallet</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {settings.preferredWallet === 'nwc' && (
-            <div className="pt-2">
-              <Input
-                placeholder="NWC connection string (nostr+walletconnect://...)"
-                value={settings.nwcConnectionString || ''}
-                onChange={(e) => updateSetting('nwcConnectionString', e.target.value)}
-                className="bg-popover border-input"
-              />
-            </div>
-          )}
         </CardContent>
       </Card>
 
