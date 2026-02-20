@@ -25,12 +25,25 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const pollingRef = useRef<number | null>(null);
+  const activeQuoteRef = useRef<string | null>(null);
 
+  // Listen for MINT_QUOTE_PAID messages from background (NUT-17 or polling)
   useEffect(() => {
+    const listener = (message: { type: string; quoteId: string; mintUrl: string }) => {
+      if (message.type === 'MINT_QUOTE_PAID' && message.quoteId === activeQuoteRef.current) {
+        handleQuotePaid(message.quoteId);
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
+      chrome.runtime.onMessage.removeListener(listener);
+      // Unsubscribe on unmount
+      if (activeQuoteRef.current) {
+        chrome.runtime.sendMessage({
+          type: 'UNSUBSCRIBE_MINT_QUOTE',
+          quoteId: activeQuoteRef.current,
+        }).catch(() => {});
+        activeQuoteRef.current = null;
       }
     };
   }, []);
@@ -38,7 +51,16 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (status === 'idle' && amount && !loading) {
+          handleCreateInvoice();
+        } else if (status === 'error') {
+          handleReset();
+        } else if (status === 'success') {
+          handleReset();
+        }
+      } else if (e.key === 'Escape') {
         e.preventDefault();
         if (status === 'error' || status === 'success') {
           handleReset();
@@ -50,7 +72,7 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, onClose]);
+  }, [status, amount, loading, onClose]);
 
   const enabledMints = mints.filter((m) => m.enabled);
 
@@ -74,7 +96,7 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
       if (result.success && result.quote) {
         setQuote(result.quote);
         setStatus('waiting');
-        startPolling(result.quote.quoteId, amountNum);
+        startSubscription(result.quote.quoteId);
       } else {
         setError(result.error || 'Failed to create invoice');
       }
@@ -85,44 +107,45 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
     }
   };
 
-  const startPolling = (quoteId: string, amountNum: number) => {
-    pollingRef.current = window.setInterval(async () => {
-      try {
-        const result = await chrome.runtime.sendMessage({
-          type: 'CHECK_MINT_QUOTE',
-          mintUrl: selectedMint,
-          quoteId,
-        });
+  // Called when background notifies us the quote is paid (via NUT-17 WS or polling)
+  const handleQuotePaid = async (quoteId: string) => {
+    activeQuoteRef.current = null;
+    setStatus('minting');
 
-        if (result.paid) {
-          if (pollingRef.current) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-          }
+    try {
+      const mintResult = await chrome.runtime.sendMessage({
+        type: 'MINT_PROOFS',
+        mintUrl: selectedMint,
+        amount: parseInt(amount, 10),
+        quoteId,
+      });
 
-          setStatus('minting');
-
-          const mintResult = await chrome.runtime.sendMessage({
-            type: 'MINT_PROOFS',
-            mintUrl: selectedMint,
-            amount: amountNum,
-            quoteId,
-          });
-
-          if (mintResult.success) {
-            setStatus('success');
-            setTimeout(() => {
-              onSuccess();
-            }, 1500);
-          } else {
-            setStatus('error');
-            setError(mintResult.error || 'Failed to mint proofs');
-          }
-        }
-      } catch {
-        // Continue polling on error
+      if (mintResult.success) {
+        setStatus('success');
+        setTimeout(() => {
+          onSuccess();
+        }, 1500);
+      } else {
+        setStatus('error');
+        setError(mintResult.error || 'Failed to mint proofs');
       }
-    }, 3000);
+    } catch {
+      setStatus('error');
+      setError('Failed to mint proofs');
+    }
+  };
+
+  // Subscribe to quote status via background (NUT-17 WebSocket or polling fallback)
+  const startSubscription = (quoteId: string) => {
+    activeQuoteRef.current = quoteId;
+    chrome.runtime.sendMessage({
+      type: 'SUBSCRIBE_MINT_QUOTE',
+      mintUrl: selectedMint,
+      quoteId,
+    }).catch(() => {
+      setStatus('error');
+      setError('Failed to subscribe to quote status');
+    });
   };
 
   const copyToClipboard = async () => {
@@ -134,9 +157,12 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   };
 
   const handleReset = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
+    if (activeQuoteRef.current) {
+      chrome.runtime.sendMessage({
+        type: 'UNSUBSCRIBE_MINT_QUOTE',
+        quoteId: activeQuoteRef.current,
+      }).catch(() => {});
+      activeQuoteRef.current = null;
     }
     setQuote(null);
     setStatus('idle');
@@ -193,6 +219,9 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
         {(status === 'error' || status === 'success') && (
           <Button variant="secondary" onClick={handleReset}>
             {status === 'error' ? 'Try Again' : 'Done'}
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+              Enter
+            </Badge>
           </Button>
         )}
 
@@ -251,7 +280,12 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
         onClick={handleCreateInvoice}
         disabled={loading || !amount}
       >
-        {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating...</> : 'Generate Invoice'}
+        {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating...</> : <>
+          Generate Invoice
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
+        </>}
       </Button>
 
       <Button variant="secondary" onClick={onClose}>

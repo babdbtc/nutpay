@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Check, Copy, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 
 interface SecuritySetupProps {
@@ -40,6 +41,38 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
     }
     return indices.sort((a, b) => a - b);
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (step === 'choose') {
+          setStep('create');
+        } else if (step === 'create' && !loading) {
+          handleCreateCredential();
+        } else if (step === 'recovery' && acknowledgedPhrase) {
+          handleProceedToVerify();
+        } else if (step === 'verify') {
+          handleVerifyWords();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (step === 'choose') {
+          onSkip();
+        } else if (step === 'create') {
+          setStep('choose');
+        } else if (step === 'recovery') {
+          // Can't go back from recovery (credential already created)
+        } else if (step === 'verify') {
+          setStep('recovery');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [step, loading, acknowledgedPhrase, verificationInputs]);
 
   const handleCreateCredential = async () => {
     setError(null);
@@ -163,10 +196,16 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
 
         <Button onClick={() => setStep('create')}>
           Continue with {authType === 'pin' ? 'PIN' : 'Password'}
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
 
         <Button variant="ghost" onClick={onSkip} className="text-muted-foreground">
           Skip for now
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );
@@ -235,10 +274,16 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
 
         <Button onClick={handleCreateCredential} disabled={loading}>
           {loading ? 'Setting up...' : 'Continue'}
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
 
         <Button variant="ghost" onClick={() => setStep('choose')} className="text-muted-foreground">
           Back
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );
@@ -306,6 +351,9 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
 
         <Button onClick={handleProceedToVerify} disabled={!acknowledgedPhrase}>
           Verify Phrase
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
       </div>
     );
@@ -353,10 +401,16 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
 
         <Button onClick={handleVerifyWords}>
           Complete Setup
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
 
         <Button variant="ghost" onClick={() => setStep('recovery')} className="text-muted-foreground">
           Back to Phrase
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );

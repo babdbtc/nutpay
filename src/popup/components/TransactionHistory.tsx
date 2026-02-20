@@ -33,6 +33,19 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
     loadTransactions(true);
   }, [filters]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onBack();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack]);
+
   const loadTransactions = async (reset = false) => {
     setLoading(true);
     const newOffset = reset ? 0 : offset;
@@ -135,7 +148,7 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
+        <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8" title="Back (Esc)">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-lg font-semibold text-white flex-1">Transaction History</h1>

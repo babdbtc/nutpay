@@ -383,18 +383,9 @@ function Options() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Keyboard shortcuts for modals
+  // Keyboard shortcuts for modals and inputs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        if (e.key === 'Escape') {
-          // Allow Escape to close modal even when in input
-        } else {
-          return;
-        }
-      }
-
       if (e.key === 'Escape') {
         if (showSetupModal) {
           e.preventDefault();
@@ -412,13 +403,41 @@ function Options() {
           e.preventDefault();
           setShowDisableModal(false);
           resetDisableModal();
+        } else if (editingEntry) {
+          e.preventDefault();
+          cancelEditing();
+        }
+      } else if (e.key === 'Enter') {
+        // Allow Enter from inputs in modals and specific fields
+        if (showSetupModal && !securityLoading) {
+          e.preventDefault();
+          if (setupStep === 'create') {
+            handleSetupSecurity();
+          } else if (setupStep === 'recovery' && setupAcknowledged) {
+            handleFinishSetup();
+          }
+        } else if (showChangeModal && !securityLoading) {
+          e.preventDefault();
+          handleChangeCredential();
+        } else if (showRecoveryModal && !securityLoading) {
+          e.preventDefault();
+          if (!recoveryPhrase) {
+            handleViewRecoveryPhrase();
+          } else {
+            setShowRecoveryModal(false);
+            resetRecoveryModal();
+          }
+        } else if (showDisableModal && !securityLoading) {
+          e.preventDefault();
+          handleDisableSecurity();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSetupModal, showChangeModal, showRecoveryModal, showDisableModal]);
+  }, [showSetupModal, showChangeModal, showRecoveryModal, showDisableModal,
+      setupStep, setupAcknowledged, securityLoading, recoveryPhrase, editingEntry]);
 
   if (loading) {
     return (
@@ -678,6 +697,7 @@ function Options() {
               placeholder="Add mint URL..."
               value={newMintUrl}
               onChange={(e) => setNewMintUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMint(); } }}
               className="bg-popover border-input flex-1"
             />
             <Button
@@ -741,6 +761,7 @@ function Options() {
                           className="w-24 bg-card border-input text-right text-sm"
                           value={editMaxPerPayment}
                           onChange={(e) => setEditMaxPerPayment(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
                           min="1"
                         />
                       </div>
@@ -753,6 +774,7 @@ function Options() {
                           className="w-24 bg-card border-input text-right text-sm"
                           value={editMaxPerDay}
                           onChange={(e) => setEditMaxPerDay(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
                           min="1"
                         />
                       </div>
@@ -873,9 +895,17 @@ function Options() {
               <div className="flex gap-3">
                 <Button variant="secondary" className="flex-1" onClick={() => setShowSetupModal(false)}>
                   Cancel
+                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                    Esc
+                  </Badge>
                 </Button>
                 <Button className="flex-1" onClick={handleSetupSecurity} disabled={securityLoading}>
-                  {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}
+                  {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>
+                    Continue
+                    <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                      Enter
+                    </Badge>
+                  </>}
                 </Button>
               </div>
             </div>
@@ -934,6 +964,9 @@ function Options() {
 
               <Button className="w-full" onClick={handleFinishSetup} disabled={!setupAcknowledged}>
                 Finish Setup
+                <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                  Enter
+                </Badge>
               </Button>
             </div>
           )}
@@ -1024,9 +1057,17 @@ function Options() {
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setShowChangeModal(false)}>
                 Cancel
+                <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                  Esc
+                </Badge>
               </Button>
               <Button className="flex-1" onClick={handleChangeCredential} disabled={securityLoading}>
-                {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>
+                  Save
+                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                    Enter
+                  </Badge>
+                </>}
               </Button>
             </div>
           </div>
@@ -1083,9 +1124,17 @@ function Options() {
               <div className="flex gap-3">
                 <Button variant="secondary" className="flex-1" onClick={() => setShowRecoveryModal(false)}>
                   Cancel
+                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                    Esc
+                  </Badge>
                 </Button>
                 <Button className="flex-1" onClick={handleViewRecoveryPhrase} disabled={securityLoading}>
-                  {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'View'}
+                  {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>
+                    View
+                    <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                      Enter
+                    </Badge>
+                  </>}
                 </Button>
               </div>
             </div>
@@ -1123,6 +1172,9 @@ function Options() {
 
               <Button className="w-full" onClick={() => setShowRecoveryModal(false)}>
                 Done
+                <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                  Enter
+                </Badge>
               </Button>
             </div>
           )}
@@ -1179,6 +1231,9 @@ function Options() {
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setShowDisableModal(false)}>
                 Cancel
+                <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                  Esc
+                </Badge>
               </Button>
               <Button
                 variant="destructive"
@@ -1186,7 +1241,12 @@ function Options() {
                 onClick={handleDisableSecurity}
                 disabled={securityLoading}
               >
-                {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disable'}
+                {securityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>
+                  Disable
+                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                    Enter
+                  </Badge>
+                </>}
               </Button>
             </div>
           </div>

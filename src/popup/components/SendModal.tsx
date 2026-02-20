@@ -148,7 +148,21 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      // Don't intercept Enter when typing in textarea (lightning invoice)
+      if (e.key === 'Enter' && e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (generatedToken || success) {
+          onSuccess();
+        } else if (meltQuote && !loading) {
+          handlePayInvoice();
+        }
+        // Don't handle Enter for base form — user may need to tab between fields
+        // The ecash amount input and lightning textarea have their own submit flows
+      } else if (e.key === 'Escape') {
         e.preventDefault();
         if (meltQuote) {
           setMeltQuote(null);
@@ -162,7 +176,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [meltQuote, generatedToken, success, onSuccess, onClose]);
+  }, [meltQuote, generatedToken, success, loading, onSuccess, onClose]);
 
   // Show generated token
   if (generatedToken) {
@@ -183,7 +197,12 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
           </Button>
         </div>
 
-        <Button onClick={onSuccess}>Done</Button>
+        <Button onClick={onSuccess}>
+          Done
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
+        </Button>
       </div>
     );
   }
@@ -196,7 +215,12 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
           <Check className="h-4 w-4" />
           Payment sent successfully!
         </div>
-        <Button onClick={onSuccess}>Done</Button>
+        <Button onClick={onSuccess}>
+          Done
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
+        </Button>
       </div>
     );
   }
@@ -237,7 +261,12 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
             </Badge>
           </Button>
           <Button className="flex-1" onClick={handlePayInvoice} disabled={loading}>
-            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Paying...</> : 'Confirm Payment'}
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Paying...</> : <>
+              Confirm Payment
+              <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+                Enter
+              </Badge>
+            </>}
           </Button>
         </div>
       </div>

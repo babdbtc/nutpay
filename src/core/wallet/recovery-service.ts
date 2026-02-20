@@ -1,4 +1,4 @@
-import { Wallet, Mint, type Proof, type MintKeyset } from '@cashu/cashu-ts';
+import { Wallet, Mint, hasValidDleq, type Proof, type MintKeyset } from '@cashu/cashu-ts';
 import { storeProofs } from './proof-manager';
 import { setCounters, type KeysetCounters } from '../storage/counter-store';
 import { storeSeed } from '../storage/seed-store';
@@ -198,8 +198,11 @@ async function recoverFromMint(
       );
 
       if (proofs.length > 0) {
+        // NUT-12: Verify DLEQ on restored proofs if mint supports it
+        const verifiedProofs = await verifyRestoredProofsDleq(wallet, proofs, keyset.id);
+
         // Check which proofs are still unspent using NUT-07
-        const unspent = await checkUnspentProofs(wallet, proofs);
+        const unspent = await checkUnspentProofs(wallet, verifiedProofs);
 
         if (unspent.length > 0) {
           recoveredProofs.push(...unspent);
@@ -229,6 +232,39 @@ async function recoverFromMint(
     amount: totalAmount,
     counters: keysetCounters,
   };
+}
+
+/**
+ * NUT-12: Verify DLEQ proofs on restored proofs.
+ * Logs warnings for proofs with invalid DLEQ but does NOT reject them during
+ * recovery — the user likely wants their funds back even if DLEQ is missing
+ * (e.g., proofs minted before the mint added NUT-12 support).
+ */
+async function verifyRestoredProofsDleq(
+  wallet: Wallet,
+  proofs: Proof[],
+  keysetId: string
+): Promise<Proof[]> {
+  try {
+    const mintInfo = await wallet.mint.getLazyMintInfo();
+    const nut12Support = mintInfo.isSupported(12);
+    if (!nut12Support.supported) return proofs;
+
+    const keyset = wallet.getKeyset(keysetId);
+    let invalidCount = 0;
+    for (const proof of proofs) {
+      if (!hasValidDleq(proof, keyset)) {
+        invalidCount++;
+      }
+    }
+    if (invalidCount > 0) {
+      console.warn(`[Nutpay] Recovery: ${invalidCount}/${proofs.length} proofs have invalid/missing DLEQ for keyset ${keysetId}`);
+    }
+  } catch (error) {
+    // Don't fail recovery over DLEQ check errors
+    console.warn('[Nutpay] Recovery: DLEQ verification skipped:', error);
+  }
+  return proofs;
 }
 
 /**

@@ -15,6 +15,8 @@ import {
   generateSendToken,
   getMeltQuote,
   payLightningInvoice,
+  subscribeMintQuote,
+  unsubscribeMintQuote,
 } from '../core/wallet/cashu-wallet';
 import { getRecentTransactions, getFilteredTransactions } from '../core/storage/transaction-store';
 import { getSettings, updateSettings, getMints, addMint, updateMint, removeMint } from '../core/storage/settings-store';
@@ -490,6 +492,28 @@ async function handleMessage(
 
     case 'CANCEL_RECOVERY': {
       cancelRecovery();
+      return { success: true };
+    }
+
+    // NUT-17 WebSocket subscriptions
+    case 'SUBSCRIBE_MINT_QUOTE': {
+      const msg = message as ExtensionMessage & { mintUrl: string; quoteId: string };
+      subscribeMintQuote(msg.mintUrl, msg.quoteId, () => {
+        // Broadcast MINT_QUOTE_PAID to all extension views (popup, etc.)
+        chrome.runtime.sendMessage({
+          type: 'MINT_QUOTE_PAID',
+          quoteId: msg.quoteId,
+          mintUrl: msg.mintUrl,
+        }).catch(() => {
+          // No listeners — popup may be closed, that's fine
+        });
+      });
+      return { success: true };
+    }
+
+    case 'UNSUBSCRIBE_MINT_QUOTE': {
+      const msg = message as ExtensionMessage & { quoteId: string };
+      unsubscribeMintQuote(msg.quoteId);
       return { success: true };
     }
 

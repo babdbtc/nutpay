@@ -43,6 +43,19 @@ export function MintInfoModal({
     loadMintInfo();
   }, [mintUrl]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const loadMintInfo = async () => {
     setLoading(true);
     setError(null);
@@ -80,6 +93,9 @@ export function MintInfoModal({
         </div>
         <Button variant="secondary" onClick={onClose}>
           Close
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );
@@ -173,6 +189,9 @@ export function MintInfoModal({
       <div className="flex gap-3">
         <Button variant="secondary" className="flex-1" onClick={onClose}>
           Close
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     </div>
