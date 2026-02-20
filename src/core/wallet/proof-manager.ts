@@ -147,5 +147,42 @@ export async function consolidateProofs(mintUrl: string): Promise<void> {
   }
 }
 
+// Reconcile proof states with mints (NUT-07)
+// Removes proofs that have been spent externally
+export async function reconcileProofStates(): Promise<number> {
+  const allStoredProofs = await getProofs();
+  if (allStoredProofs.length === 0) return 0;
+
+  // Group proofs by mint
+  const byMint = new Map<string, typeof allStoredProofs>();
+  for (const sp of allStoredProofs) {
+    const existing = byMint.get(sp.mintUrl) || [];
+    existing.push(sp);
+    byMint.set(sp.mintUrl, existing);
+  }
+
+  let removedCount = 0;
+
+  for (const [mintUrl, storedProofs] of byMint) {
+    try {
+      const wallet = await getWalletForMint(mintUrl);
+      const proofs = storedProofs.map((sp) => sp.proof);
+
+      const { spent } = await wallet.groupProofsByState(proofs);
+
+      if (spent.length > 0) {
+        await removeProofs(spent);
+        removedCount += spent.length;
+        console.log(`[Nutpay] Reconciled ${spent.length} spent proofs from ${mintUrl}`);
+      }
+    } catch (error) {
+      // Don't fail the whole reconciliation if one mint is unreachable
+      console.warn(`[Nutpay] Failed to reconcile proofs for ${mintUrl}:`, error);
+    }
+  }
+
+  return removedCount;
+}
+
 // Re-export balance functions
 export { getBalanceByMint, getTotalBalance, getProofs, getProofsForMint };

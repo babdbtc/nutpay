@@ -35,7 +35,7 @@ function AnimatedCheckmark() {
 interface PaymentDetails {
   requestId: string;
   origin: string;
-  mint: string;
+  mints: string[];
   amount: number;
   unit: string;
   balance: number;
@@ -54,7 +54,7 @@ function Approval() {
     setDetails({
       requestId: params.get('requestId') || '',
       origin: params.get('origin') || '',
-      mint: params.get('mint') || '',
+      mints: (params.get('mints') || '').split(',').filter(Boolean),
       amount: parseInt(params.get('amount') || '0', 10),
       unit: params.get('unit') || 'sat',
       balance: parseInt(params.get('balance') || '0', 10),
@@ -138,13 +138,14 @@ function Approval() {
     );
   }
 
-  const mintHost = (() => {
+  const mintHosts = details.mints.map((m) => {
     try {
-      return new URL(details.mint).hostname;
+      return new URL(m).hostname;
     } catch {
-      return details.mint;
+      return m;
     }
-  })();
+  });
+  const mintDisplay = mintHosts.join(', ');
 
   const siteHost = (() => {
     try {
@@ -196,8 +197,8 @@ function Approval() {
             </div>
             <div className="flex justify-between items-center py-2">
               <span className="text-sm text-muted-foreground">Mint</span>
-              <span className="text-sm font-medium truncate max-w-[200px]" title={details.mint}>
-                {mintHost}
+              <span className="text-sm font-medium truncate max-w-[200px]" title={details.mints.join(', ')}>
+                {mintDisplay}
               </span>
             </div>
           </div>

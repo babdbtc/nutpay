@@ -8,7 +8,7 @@ import type {
 } from '../shared/types';
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
 import { isAutoApproved, recordPayment, getAllowlistEntry } from '../core/storage/allowlist-store';
-import { validatePaymentRequest } from '../core/protocol/xcashu';
+import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval, openUnlockPopup, waitForUnlock } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { getMints } from '../core/storage/settings-store';
@@ -18,33 +18,51 @@ import { getSecurityConfig, isSessionValid, isAccountLocked } from '../core/stor
 // Store pending payments
 const pendingPayments = new Map<string, PendingPayment>();
 
-// Check if payment is feasible (do we have enough balance from the right mint?)
+// Check if payment is feasible (do we have enough balance from any accepted mint?)
 async function checkPaymentFeasibility(
   paymentRequest: XCashuPaymentRequest
 ): Promise<{
   canPay: boolean;
+  selectedMint: string | null; // The mint we'll use
   balance: number;
   mintKnown: boolean;
   mintName: string;
 }> {
-  const { mint: requestedMint, amount } = paymentRequest;
-  const normalizedRequestedMint = normalizeMintUrl(requestedMint);
+  const { mints: acceptedMints, amount } = paymentRequest;
 
-  // Check if we know this mint
-  const mints = await getMints();
-  const knownMint = mints.find((m) => normalizeMintUrl(m.url) === normalizedRequestedMint);
-  const mintKnown = !!knownMint;
-  const mintName = knownMint?.name || new URL(requestedMint).hostname;
-
-  // Check balance for this mint (getBalanceByMint already returns normalized URLs)
+  // Get our known mints and current balances
+  const knownMints = await getMints();
   const balances = await getBalanceByMint();
-  const balance = balances.get(normalizedRequestedMint) || 0;
+
+  // Try each accepted mint in order to find one we can pay from
+  for (const requestedMint of acceptedMints) {
+    const normalizedMint = normalizeMintUrl(requestedMint);
+    const knownMint = knownMints.find((m) => normalizeMintUrl(m.url) === normalizedMint);
+    const balance = balances.get(normalizedMint) || 0;
+
+    if (balance >= amount) {
+      return {
+        canPay: true,
+        selectedMint: normalizedMint,
+        balance,
+        mintKnown: !!knownMint,
+        mintName: knownMint?.name || new URL(requestedMint).hostname,
+      };
+    }
+  }
+
+  // No mint has sufficient balance -- return info about the first mint for error reporting
+  const firstMint = acceptedMints[0];
+  const normalizedFirst = normalizeMintUrl(firstMint);
+  const knownFirst = knownMints.find((m) => normalizeMintUrl(m.url) === normalizedFirst);
+  const firstBalance = balances.get(normalizedFirst) || 0;
 
   return {
-    canPay: balance >= amount,
-    balance,
-    mintKnown,
-    mintName,
+    canPay: false,
+    selectedMint: null,
+    balance: firstBalance,
+    mintKnown: !!knownFirst,
+    mintName: knownFirst?.name || new URL(firstMint).hostname,
   };
 }
 
@@ -91,7 +109,17 @@ export async function handlePaymentRequired(
   message: PaymentRequiredMessage,
   tabId: number
 ): Promise<PaymentTokenMessage | PaymentDeniedMessage | PaymentFailedMessage> {
-  const { requestId, url, method, headers, body, paymentRequest, origin } = message;
+  const { requestId, url, method, headers, body, paymentRequestEncoded, origin } = message;
+
+  // Decode the NUT-18 payment request from the X-Cashu header
+  const paymentRequest = decodePaymentRequestHeader(paymentRequestEncoded);
+  if (!paymentRequest) {
+    return {
+      type: 'PAYMENT_FAILED',
+      requestId,
+      error: 'Failed to decode payment request from X-Cashu header',
+    };
+  }
 
   // Check if wallet is locked before processing any payment
   const securityConfig = await getSecurityConfig();
@@ -137,11 +165,17 @@ export async function handlePaymentRequired(
 
   if (!feasibility.canPay) {
     // Build a helpful error message
+    const mintNames = paymentRequest.mints
+      .map((m) => {
+        try { return new URL(m).hostname; } catch { return m; }
+      })
+      .join(', ');
+
     let errorMsg: string;
     if (!feasibility.mintKnown && feasibility.balance === 0) {
-      errorMsg = `This site requires payment from "${feasibility.mintName}" but you have no tokens from this mint. Deposit tokens from this mint first.`;
+      errorMsg = `This site requires payment from [${mintNames}] but you have no tokens from any of these mints. Deposit tokens first.`;
     } else if (feasibility.balance === 0) {
-      errorMsg = `Insufficient funds. You have no tokens from "${feasibility.mintName}". Deposit tokens from this mint first.`;
+      errorMsg = `Insufficient funds. You have no tokens from any accepted mint (${mintNames}). Deposit tokens first.`;
     } else {
       errorMsg = `Insufficient funds. Need ${paymentRequest.amount} ${paymentRequest.unit}, but you only have ${feasibility.balance} ${paymentRequest.unit} from "${feasibility.mintName}".`;
     }

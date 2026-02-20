@@ -1,10 +1,13 @@
 import type { Proof } from '@cashu/cashu-ts';
 
-// X-Cashu payment request (from 402 body)
+// NUT-24 / NUT-18 payment request (from 402 X-Cashu header)
 export interface XCashuPaymentRequest {
-  mint: string;
-  amount: number;
-  unit: string;
+  mints: string[];     // NUT-18 `m` field: accepted mints
+  amount: number;      // NUT-18 `a` field
+  unit: string;        // NUT-18 `u` field
+  id?: string;         // NUT-18 `i` field: payment id
+  description?: string; // NUT-18 `d` field
+  singleUse?: boolean; // NUT-18 `s` field
 }
 
 // Message types for extension communication
@@ -75,7 +78,7 @@ export interface PaymentRequiredMessage extends BaseMessage {
   method: string;
   headers: Record<string, string>;
   body: string | null;
-  paymentRequest: XCashuPaymentRequest;
+  paymentRequestEncoded: string; // Raw creqA... string from X-Cashu header
   origin: string;
 }
 
@@ -132,13 +135,10 @@ export type ThemeId = 'classic' | 'violet' | 'midnight' | 'ocean' | 'forest' | '
 // Extension settings
 export interface Settings {
   alwaysAsk: boolean;
-  preferredWallet: 'builtin' | 'nwc' | 'nip60';
   autoDiscoverMints: boolean;
   displayFormat: 'symbol' | 'text'; // 'symbol' = ₿10, 'text' = 10 sats
   theme: ThemeId;
   enableAnimations: boolean;
-  nwcConnectionString?: string;
-  nip60Pubkey?: string;
 }
 
 // Mint configuration
