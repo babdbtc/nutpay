@@ -62,7 +62,11 @@ export type MessageType =
   | 'GET_RECOVERY_PROGRESS'
   | 'CANCEL_RECOVERY'
   | 'GET_WALLET_INFO'
-  | 'SETUP_WALLET_SEED';
+  | 'SETUP_WALLET_SEED'
+  // NUT-17 WebSocket subscriptions
+  | 'SUBSCRIBE_MINT_QUOTE'
+  | 'UNSUBSCRIBE_MINT_QUOTE'
+  | 'MINT_QUOTE_PAID';
 
 // Base message structure
 export interface BaseMessage {

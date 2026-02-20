@@ -1,5 +1,5 @@
-import { getEncodedTokenV4, getDecodedToken, type Proof, type MintQuoteResponse, type MeltQuoteResponse } from '@cashu/cashu-ts';
-import { getWalletForMint, discoverMint, findMintForPayment } from './mint-manager';
+import { getEncodedTokenV4, getDecodedToken, hasValidDleq, type Proof, type MintQuoteResponse, type MeltQuoteResponse, type Wallet } from '@cashu/cashu-ts';
+import { getWalletForMint, discoverMint, findMintForPayment, mintSupportsNut } from './mint-manager';
 import {
   selectProofs,
   selectProofsForSpend,
@@ -15,6 +15,20 @@ import { hasSeed } from '../storage/seed-store';
 import type { XCashuPaymentRequest, MintBalance, PendingMintQuote, MeltQuoteInfo, PendingToken } from '../../shared/types';
 import { getMints } from '../storage/settings-store';
 import { normalizeMintUrl } from '../../shared/format';
+
+// NUT-12 DLEQ: Verify proofs from mints that support it.
+// Uses hasValidDleq() for manual verification of proofs returned by the mint.
+async function verifyDleqIfSupported(wallet: Wallet, proofs: Proof[], mintUrl: string): Promise<void> {
+  const dleqSupported = await mintSupportsNut(mintUrl, 12);
+  if (!dleqSupported || proofs.length === 0) return;
+
+  const keyset = wallet.getKeyset();
+  for (const proof of proofs) {
+    if (!hasValidDleq(proof, keyset)) {
+      throw new Error('Mint returned proofs with invalid or missing DLEQ signature (NUT-12)');
+    }
+  }
+}
 
 export interface PaymentResult {
   success: boolean;
@@ -129,6 +143,8 @@ export async function createPaymentToken(
         sendProofs = result.send;
         changeProofs = result.keep;
       }
+      // NUT-12: Verify DLEQ on change proofs returned by the mint
+      await verifyDleqIfSupported(wallet, changeProofs, actualMint);
     } catch (mintError) {
       // Mint operation failed — proofs were NOT spent at the mint.
       // Revert them back to LIVE so they're available again.
@@ -182,17 +198,19 @@ export async function receiveToken(encodedToken: string): Promise<{
 
     // Receive the proofs using v3 ops API
     const seedExists = await hasSeed();
+    const dleqSupported = await mintSupportsNut(mintUrl, 12);
     let receivedProofs: Proof[];
 
     if (seedExists) {
       // Use deterministic secrets (NUT-13)
-      receivedProofs = await wallet.ops
+      const builder = wallet.ops
         .receive(encodedToken)
-        .asDeterministic(0) // Auto-reserve counters
-        .run();
+        .asDeterministic(0); // Auto-reserve counters
+      // NUT-12: Require DLEQ verification if mint supports it
+      receivedProofs = await (dleqSupported ? builder.requireDleq(true) : builder).run();
     } else {
       // Legacy: random secrets
-      receivedProofs = await wallet.receive(encodedToken);
+      receivedProofs = await wallet.receive(encodedToken, { requireDleq: dleqSupported });
     }
 
     // Store the proofs (using normalized URL)
@@ -355,6 +373,9 @@ export async function mintProofsFromQuote(
       proofs = await wallet.mintProofs(amount, quoteId);
     }
 
+    // NUT-12: Verify DLEQ on freshly minted proofs
+    await verifyDleqIfSupported(wallet, proofs, normalizedUrl);
+
     // Store the proofs
     await storeProofs(proofs, normalizedUrl);
 
@@ -382,6 +403,95 @@ export async function mintProofsFromQuote(
       success: false,
       error: error instanceof Error ? error.message : 'Failed to mint proofs',
     };
+  }
+}
+
+// ==================== NUT-17 Mint Quote Subscription ====================
+
+// Active mint quote subscriptions (quoteId -> cancel function)
+const mintQuoteSubscriptions = new Map<string, () => void>();
+
+// Subscribe to a mint quote's payment status.
+// Uses NUT-17 WebSocket if supported, falls back to HTTP polling.
+// Calls onPaid callback when the quote transitions to PAID.
+export async function subscribeMintQuote(
+  mintUrl: string,
+  quoteId: string,
+  onPaid: () => void
+): Promise<void> {
+  // Don't double-subscribe
+  if (mintQuoteSubscriptions.has(quoteId)) return;
+
+  const normalizedUrl = normalizeMintUrl(mintUrl);
+  const wallet = await getWalletForMint(normalizedUrl);
+
+  // Check NUT-17 support
+  const wsSupported = await mintSupportsNut(normalizedUrl, 17);
+
+  if (wsSupported) {
+    try {
+      // NUT-17: Subscribe via WebSocket — resolves once when quote becomes PAID
+      const controller = new AbortController();
+      mintQuoteSubscriptions.set(quoteId, () => controller.abort());
+
+      wallet.on.onceMintPaid(quoteId, {
+        signal: controller.signal,
+        timeoutMs: 10 * 60 * 1000, // 10 minute timeout
+      }).then(() => {
+        mintQuoteSubscriptions.delete(quoteId);
+        onPaid();
+      }).catch((err) => {
+        mintQuoteSubscriptions.delete(quoteId);
+        // AbortError means intentional cancel — don't log
+        if ((err as Error).name !== 'AbortError') {
+          console.warn('[Nutpay] WS mint quote subscription ended:', err);
+          // Fall back to polling on WS failure
+          startMintQuotePolling(normalizedUrl, quoteId, onPaid);
+        }
+      });
+
+      console.log(`[Nutpay] NUT-17 WS subscription active for quote ${quoteId}`);
+      return;
+    } catch (error) {
+      console.warn('[Nutpay] Failed to start WS subscription, falling back to polling:', error);
+    }
+  }
+
+  // Fallback: HTTP polling
+  startMintQuotePolling(normalizedUrl, quoteId, onPaid);
+}
+
+function startMintQuotePolling(mintUrl: string, quoteId: string, onPaid: () => void): void {
+  // Don't double-subscribe
+  if (mintQuoteSubscriptions.has(quoteId)) return;
+
+  const intervalId = setInterval(async () => {
+    try {
+      const result = await checkMintQuoteStatus(mintUrl, quoteId);
+      if (result.paid) {
+        clearInterval(intervalId);
+        mintQuoteSubscriptions.delete(quoteId);
+        onPaid();
+      }
+    } catch {
+      // Continue polling on transient errors
+    }
+  }, 5000); // 5 second poll interval (less aggressive than the old 3s)
+
+  mintQuoteSubscriptions.set(quoteId, () => {
+    clearInterval(intervalId);
+    mintQuoteSubscriptions.delete(quoteId);
+  });
+
+  console.log(`[Nutpay] Polling fallback active for quote ${quoteId}`);
+}
+
+// Cancel a mint quote subscription
+export function unsubscribeMintQuote(quoteId: string): void {
+  const cancel = mintQuoteSubscriptions.get(quoteId);
+  if (cancel) {
+    cancel();
+    mintQuoteSubscriptions.delete(quoteId);
   }
 }
 
@@ -451,6 +561,8 @@ export async function generateSendToken(
         sendProofs = result.send;
         changeProofs = result.keep;
       }
+      // NUT-12: Verify DLEQ on change proofs returned by the mint
+      await verifyDleqIfSupported(wallet, changeProofs, normalizedUrl);
     } catch (mintError) {
       // Mint operation failed — revert proofs back to LIVE
       await revertPendingProofs(selection.proofs);
@@ -676,8 +788,11 @@ export async function payLightningInvoice(
     // Clean up cache
     meltQuoteCache.delete(quoteId);
 
-    // Atomically remove spent proofs and add change in one storage write
+    // NUT-12: Verify DLEQ on melt change proofs
     const changeProofs = meltResponse.change || [];
+    await verifyDleqIfSupported(wallet, changeProofs, normalizedUrl);
+
+    // Atomically remove spent proofs and add change in one storage write
     await finalizePendingSpend(selection.proofs, changeProofs, normalizedUrl);
 
     const changeAmount = changeProofs.reduce((sum, p) => sum + p.amount, 0);

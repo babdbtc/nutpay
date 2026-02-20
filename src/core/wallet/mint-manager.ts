@@ -158,6 +158,19 @@ export async function getMintDetails(mintUrl: string): Promise<{
   }
 }
 
+// Check if a mint supports a specific NUT (cached via wallet.mint.getLazyMintInfo)
+export async function mintSupportsNut(mintUrl: string, nut: number): Promise<boolean> {
+  try {
+    const wallet = await getWalletForMint(mintUrl);
+    const mintInfo = await wallet.mint.getLazyMintInfo();
+    // isSupported returns { supported: boolean } for most NUTs
+    const support = mintInfo.isSupported(nut as Parameters<typeof mintInfo.isSupported>[0]);
+    return support.supported;
+  } catch {
+    return false;
+  }
+}
+
 // Get mint balance details including proof count and denominations
 export async function getMintBalanceDetails(mintUrl: string): Promise<{
   balance: number;

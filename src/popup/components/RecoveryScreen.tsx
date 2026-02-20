@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Eye, EyeOff, KeyRound, Loader2, Check, X, Wallet } from 'lucide-react';
 import type { RecoveryProgress, MintConfig } from '../../shared/types';
 
@@ -99,6 +100,43 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
     return () => clearInterval(interval);
   }, [step]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept Enter when typing in textarea (recovery phrase input)
+      if (e.key === 'Enter' && e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (step === 'phrase' && !loading) {
+          handleVerifyPhrase();
+        } else if (step === 'selectMints' && !loading && selectedMints.size > 0) {
+          handleStartRecovery();
+        } else if (step === 'results') {
+          handleFinishRecovery();
+        } else if (step === 'newCredential' && !loading) {
+          handleResetCredential();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (step === 'phrase') {
+          onBack();
+        } else if (step === 'selectMints') {
+          setStep('phrase');
+        } else if (step === 'recovering') {
+          handleCancelRecovery();
+        } else if (step === 'newCredential') {
+          setStep('phrase');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [step, loading, selectedMints.size]);
 
   const handleVerifyPhrase = async () => {
     if (!recoveryPhrase.trim()) {
@@ -316,10 +354,16 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
         <Button onClick={handleVerifyPhrase} disabled={loading}>
           {loading ? 'Verifying...' : 'Continue'}
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
 
         <Button variant="ghost" onClick={onBack} className="text-muted-foreground">
           Back to Login
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );
@@ -386,10 +430,16 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
         <Button onClick={handleStartRecovery} disabled={loading || selectedMints.size === 0}>
           {loading ? 'Starting...' : `Scan ${selectedMints.size} Mint${selectedMints.size !== 1 ? 's' : ''}`}
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
 
         <Button variant="ghost" onClick={() => setStep('phrase')} className="text-muted-foreground">
           Back
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );
@@ -443,6 +493,9 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
         <Button variant="secondary" onClick={handleCancelRecovery}>
           Cancel
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Esc
+          </Badge>
         </Button>
       </div>
     );
@@ -490,6 +543,9 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
         <Button onClick={handleFinishRecovery}>
           Set New {authType === 'pin' ? 'PIN' : 'Password'}
+          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+            Enter
+          </Badge>
         </Button>
       </div>
     );
@@ -576,10 +632,16 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
 
       <Button onClick={handleResetCredential} disabled={loading}>
         {loading ? 'Saving...' : 'Save & Unlock'}
+        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+          Enter
+        </Badge>
       </Button>
 
       <Button variant="ghost" onClick={() => setStep('phrase')} className="text-muted-foreground">
         Start Over
+        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+          Esc
+        </Badge>
       </Button>
     </div>
   );
