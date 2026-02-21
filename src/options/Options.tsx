@@ -14,6 +14,8 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, Shield, ShieldOff, Eye, EyeOff, KeyRound, AlertCircle, Check, Copy } from 'lucide-react';
+import { CredentialForm } from '@/components/shared/CredentialForm';
+import { SeedPhraseDisplay } from '@/components/shared/SeedPhraseDisplay';
 
 function Options() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -846,44 +848,15 @@ function Options() {
                 </TabsContent>
               </Tabs>
 
-              <div className="space-y-2">
-                <Label>{setupAuthType === 'pin' ? 'PIN' : 'Password'}</Label>
-                <div className="relative">
-                  <Input
-                    type={setupShowPassword ? 'text' : 'password'}
-                    inputMode={setupAuthType === 'pin' ? 'numeric' : undefined}
-                    pattern={setupAuthType === 'pin' ? '[0-9]*' : undefined}
-                    placeholder={setupAuthType === 'pin' ? '••••' : '••••••'}
-                    value={setupCredential}
-                    onChange={(e) => setSetupCredential(e.target.value)}
-                    maxLength={setupAuthType === 'pin' ? 6 : 50}
-                    className="bg-card border-input pr-10"
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSetupShowPassword(!setupShowPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
-                  >
-                    {setupShowPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Confirm {setupAuthType === 'pin' ? 'PIN' : 'Password'}</Label>
-                <Input
-                  type={setupShowPassword ? 'text' : 'password'}
-                  inputMode={setupAuthType === 'pin' ? 'numeric' : undefined}
-                  pattern={setupAuthType === 'pin' ? '[0-9]*' : undefined}
-                  placeholder={setupAuthType === 'pin' ? '••••' : '••••••'}
-                  value={setupConfirmCredential}
-                  onChange={(e) => setSetupConfirmCredential(e.target.value)}
-                  maxLength={setupAuthType === 'pin' ? 6 : 50}
-                  className="bg-card border-input"
-                  autoComplete="new-password"
-                />
-              </div>
+              <CredentialForm
+                authType={setupAuthType}
+                credential={setupCredential}
+                onCredentialChange={setSetupCredential}
+                confirmCredential={setupConfirmCredential}
+                onConfirmChange={setSetupConfirmCredential}
+                showPassword={setupShowPassword}
+                onToggleShow={() => setSetupShowPassword(!setupShowPassword)}
+              />
 
               {securityError && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
@@ -915,18 +888,7 @@ function Options() {
                 Save this phrase to recover your wallet if you forget your {setupAuthType}
               </p>
 
-              <Card className="bg-card border-0">
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    {setupRecoveryPhrase.split(' ').map((word, i) => (
-                      <div key={i} className="bg-popover rounded p-2 text-center">
-                        <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
-                        <span className="text-white">{word}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <SeedPhraseDisplay phrase={setupRecoveryPhrase} />
 
               <Button
                 variant="secondary"
@@ -1140,18 +1102,7 @@ function Options() {
             </div>
           ) : (
             <div className="space-y-4">
-              <Card className="bg-card border-0">
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    {recoveryPhrase.split(' ').map((word, i) => (
-                      <div key={i} className="bg-popover rounded p-2 text-center">
-                        <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
-                        <span className="text-white">{word}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <SeedPhraseDisplay phrase={recoveryPhrase} />
 
               <Button
                 variant="secondary"

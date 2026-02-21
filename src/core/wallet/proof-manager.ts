@@ -240,6 +240,9 @@ export async function recoverPendingProofs(): Promise<number> {
   return recoveredCount;
 }
 
+// Exported for testing only
+export { findExactMatch as _findExactMatch, subsetSum as _subsetSum, greedySelect as _greedySelect };
+
 // Re-export balance functions and pending operations
 export {
   getBalanceByMint,

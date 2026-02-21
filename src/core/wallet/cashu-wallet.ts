@@ -37,6 +37,105 @@ export interface PaymentResult {
   transactionId?: string;
 }
 
+// ── Shared token building ─────────────────────────────────────────────
+
+/**
+ * Result of building a send token — the core mint swap operation.
+ */
+interface BuildTokenResult {
+  token: string;
+  sendProofs: Proof[];
+  changeProofs: Proof[];
+  selectedProofs: Proof[];
+}
+
+/**
+ * Select proofs, swap with the mint, verify DLEQ, encode token, and finalize.
+ *
+ * This is the shared core of createPaymentToken() and generateSendToken().
+ * It handles:
+ *   - Atomic proof selection with fee-aware re-selection
+ *   - NUT-13 deterministic vs legacy random secrets
+ *   - NUT-12 DLEQ verification on change proofs
+ *   - PENDING_SPEND marking and revert on failure
+ *
+ * Does NOT handle: transaction recording, pending token creation, or
+ * mint discovery — those are caller-specific concerns.
+ *
+ * Throws on failure (proofs are reverted before throwing).
+ */
+async function buildSendToken(
+  mintUrl: string,
+  amount: number,
+  unit: string
+): Promise<BuildTokenResult> {
+  const wallet = await getWalletForMint(mintUrl);
+
+  // Atomically select proofs and mark them PENDING_SPEND
+  let selection = await selectProofsForSpend(mintUrl, amount);
+  if (!selection) {
+    const balance = (await getBalanceByMint()).get(mintUrl) || 0;
+    throw new Error(`Insufficient funds. Need ${amount} ${unit}, have ${balance} ${unit}`);
+  }
+
+  // Calculate actual fees based on the selected proofs and mint's fee schedule
+  const fee = wallet.getFeesForProofs(selection.proofs);
+  const amountWithFees = amount + fee;
+
+  // Re-select proofs if we need more to cover fees
+  if (selection.total < amountWithFees) {
+    await revertPendingProofs(selection.proofs);
+    const reselection = await selectProofsForSpend(mintUrl, amountWithFees);
+    if (!reselection) {
+      const balance = (await getBalanceByMint()).get(mintUrl) || 0;
+      throw new Error(
+        `Insufficient funds. Need ${amountWithFees} ${unit} (${amount} + ${fee} fee), have ${balance} ${unit}`
+      );
+    }
+    selection = reselection;
+  }
+
+  // Swap with the mint
+  const seedExists = await hasSeed();
+  let sendProofs: Proof[];
+  let changeProofs: Proof[];
+
+  try {
+    if (seedExists) {
+      const result = await wallet.ops
+        .send(amount, selection.proofs)
+        .asDeterministic(0)
+        .includeFees(true)
+        .run();
+      sendProofs = result.send;
+      changeProofs = result.keep;
+    } else {
+      const result = await wallet.send(amount, selection.proofs, { includeFees: true });
+      sendProofs = result.send;
+      changeProofs = result.keep;
+    }
+    // NUT-12: Verify DLEQ on change proofs
+    await verifyDleqIfSupported(wallet, changeProofs, mintUrl);
+  } catch (mintError) {
+    // Mint operation failed — revert proofs back to LIVE
+    await revertPendingProofs(selection.proofs);
+    throw mintError;
+  }
+
+  // Encode the token
+  const token = getEncodedTokenV4({
+    mint: mintUrl,
+    proofs: sendProofs,
+  });
+
+  // Finalize: remove spent proofs, add change
+  await finalizePendingSpend(selection.proofs, changeProofs, mintUrl);
+
+  return { token, sendProofs, changeProofs, selectedProofs: selection.proofs };
+}
+
+// ── Public API ────────────────────────────────────────────────────────
+
 // Create a payment token for a NUT-24 402 payment
 export async function createPaymentToken(
   paymentRequest: XCashuPaymentRequest,
@@ -74,39 +173,6 @@ export async function createPaymentToken(
     };
   }
 
-  // Get wallet for this mint
-  const wallet = await getWalletForMint(actualMint);
-
-  // Atomically select proofs and mark them PENDING_SPEND.
-  // First try the base amount, then check if fees require more.
-  let selection = await selectProofsForSpend(actualMint, amount);
-  if (!selection) {
-    const balance = (await getBalanceByMint()).get(actualMint) || 0;
-    return {
-      success: false,
-      error: `Insufficient funds. Need ${amount} ${unit}, have ${balance} ${unit}`,
-    };
-  }
-
-  // Calculate actual fees based on the selected proofs and mint's fee schedule
-  const fee = wallet.getFeesForProofs(selection.proofs);
-  const amountWithFees = amount + fee;
-
-  // Re-select proofs if we need more to cover fees
-  if (selection.total < amountWithFees) {
-    // Revert the initial selection and try with the higher amount
-    await revertPendingProofs(selection.proofs);
-    const reselection = await selectProofsForSpend(actualMint, amountWithFees);
-    if (!reselection) {
-      const balance = (await getBalanceByMint()).get(actualMint) || 0;
-      return {
-        success: false,
-        error: `Insufficient funds. Need ${amountWithFees} ${unit} (${amount} + ${fee} fee), have ${balance} ${unit}`,
-      };
-    }
-    selection = reselection;
-  }
-
   // Create transaction record
   const transaction = await addTransaction({
     type: 'payment',
@@ -118,50 +184,8 @@ export async function createPaymentToken(
   });
 
   try {
-    // Proofs are already marked PENDING_SPEND by selectProofsForSpend.
-    // If the service worker dies after the mint accepts but before cleanup,
-    // reconciliation will detect them as spent and remove them.
+    const { token } = await buildSendToken(actualMint, amount, unit);
 
-    // Create the send token using v3 ops API
-    const seedExists = await hasSeed();
-    let sendProofs: Proof[];
-    let changeProofs: Proof[];
-
-    try {
-      if (seedExists) {
-        // Use deterministic secrets (NUT-13)
-        const result = await wallet.ops
-          .send(amount, selection.proofs)
-          .asDeterministic(0) // Auto-reserve counters
-          .includeFees(true)
-          .run();
-        sendProofs = result.send;
-        changeProofs = result.keep;
-      } else {
-        // Legacy: random secrets
-        const result = await wallet.send(amount, selection.proofs, { includeFees: true });
-        sendProofs = result.send;
-        changeProofs = result.keep;
-      }
-      // NUT-12: Verify DLEQ on change proofs returned by the mint
-      await verifyDleqIfSupported(wallet, changeProofs, actualMint);
-    } catch (mintError) {
-      // Mint operation failed — proofs were NOT spent at the mint.
-      // Revert them back to LIVE so they're available again.
-      await revertPendingProofs(selection.proofs);
-      throw mintError;
-    }
-
-    // Encode the token
-    const token = getEncodedTokenV4({
-      mint: actualMint,
-      proofs: sendProofs,
-    });
-
-    // Atomically remove spent proofs and add change in one storage write
-    await finalizePendingSpend(selection.proofs, changeProofs, actualMint);
-
-    // Mark transaction as completed
     await updateTransactionStatus(transaction.id, 'completed');
 
     return {
@@ -170,7 +194,6 @@ export async function createPaymentToken(
       transactionId: transaction.id,
     };
   } catch (error) {
-    // Mark transaction as failed
     await updateTransactionStatus(transaction.id, 'failed');
 
     return {
@@ -509,71 +532,8 @@ export async function generateSendToken(
 }> {
   try {
     const normalizedUrl = normalizeMintUrl(mintUrl);
-    const wallet = await getWalletForMint(normalizedUrl);
 
-    // Atomically select proofs and mark them PENDING_SPEND
-    let selection = await selectProofsForSpend(normalizedUrl, amount);
-    if (!selection) {
-      const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
-      return {
-        success: false,
-        error: `Insufficient funds. Need ${amount} sats, have ${balance} sats`,
-      };
-    }
-
-    const fee = wallet.getFeesForProofs(selection.proofs);
-    const amountWithFees = amount + fee;
-
-    if (selection.total < amountWithFees) {
-      // Revert and re-select with fee-inclusive amount
-      await revertPendingProofs(selection.proofs);
-      const reselection = await selectProofsForSpend(normalizedUrl, amountWithFees);
-      if (!reselection) {
-        const balance = (await getBalanceByMint()).get(normalizedUrl) || 0;
-        return {
-          success: false,
-          error: `Insufficient funds. Need ${amountWithFees} sats (${amount} + ${fee} fee), have ${balance} sats`,
-        };
-      }
-      selection = reselection;
-    }
-
-    // Proofs are already marked PENDING_SPEND by selectProofsForSpend
-
-    // Create send proofs using v3 ops API
-    const seedExists = await hasSeed();
-    let sendProofs: Proof[];
-    let changeProofs: Proof[];
-
-    try {
-      if (seedExists) {
-        // Use deterministic secrets (NUT-13)
-        const result = await wallet.ops
-          .send(amount, selection.proofs)
-          .asDeterministic(0)
-          .includeFees(true)
-          .run();
-        sendProofs = result.send;
-        changeProofs = result.keep;
-      } else {
-        // Legacy: random secrets
-        const result = await wallet.send(amount, selection.proofs, { includeFees: true });
-        sendProofs = result.send;
-        changeProofs = result.keep;
-      }
-      // NUT-12: Verify DLEQ on change proofs returned by the mint
-      await verifyDleqIfSupported(wallet, changeProofs, normalizedUrl);
-    } catch (mintError) {
-      // Mint operation failed — revert proofs back to LIVE
-      await revertPendingProofs(selection.proofs);
-      throw mintError;
-    }
-
-    // Encode the token
-    const token = getEncodedTokenV4({
-      mint: normalizedUrl,
-      proofs: sendProofs,
-    });
+    const { token, sendProofs } = await buildSendToken(normalizedUrl, amount, 'sat');
 
     const actualAmount = sendProofs.reduce((sum, p) => sum + p.amount, 0);
 
@@ -588,9 +548,6 @@ export async function generateSendToken(
       status: 'pending',
     };
     await addPendingToken(pendingToken);
-
-    // Atomically remove spent proofs and add change in one storage write
-    await finalizePendingSpend(selection.proofs, changeProofs, normalizedUrl);
 
     // Record transaction with token for recovery
     await addTransaction({

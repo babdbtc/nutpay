@@ -1,11 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Check, Copy, Eye, EyeOff, ShieldAlert } from 'lucide-react';
+import { AlertCircle, Check, Copy, ShieldAlert } from 'lucide-react';
+import { CredentialForm } from '@/components/shared/CredentialForm';
+import { SeedPhraseDisplay } from '@/components/shared/SeedPhraseDisplay';
 
 interface SecuritySetupProps {
   onComplete: () => void;
@@ -156,8 +158,6 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
     }
   };
 
-  const phraseWords = useMemo(() => recoveryPhrase.split(' '), [recoveryPhrase]);
-
   // Step 1: Choose type
   if (step === 'choose') {
     return (
@@ -225,44 +225,15 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
         </div>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>{authType === 'pin' ? 'PIN' : 'Password'}</Label>
-            <div className="relative">
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                inputMode={authType === 'pin' ? 'numeric' : undefined}
-                pattern={authType === 'pin' ? '[0-9]*' : undefined}
-                placeholder={authType === 'pin' ? '••••' : '••••••'}
-                value={credential}
-                onChange={(e) => setCredential(e.target.value)}
-                maxLength={authType === 'pin' ? 6 : 50}
-                className="bg-card border-input pr-10"
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Confirm {authType === 'pin' ? 'PIN' : 'Password'}</Label>
-            <Input
-              type={showPassword ? 'text' : 'password'}
-              inputMode={authType === 'pin' ? 'numeric' : undefined}
-              pattern={authType === 'pin' ? '[0-9]*' : undefined}
-              placeholder={authType === 'pin' ? '••••' : '••••••'}
-              value={confirmCredential}
-              onChange={(e) => setConfirmCredential(e.target.value)}
-              maxLength={authType === 'pin' ? 6 : 50}
-              className="bg-card border-input"
-              autoComplete="new-password"
-            />
-          </div>
+          <CredentialForm
+            authType={authType}
+            credential={credential}
+            onCredentialChange={setCredential}
+            confirmCredential={confirmCredential}
+            onConfirmChange={setConfirmCredential}
+            showPassword={showPassword}
+            onToggleShow={() => setShowPassword(!showPassword)}
+          />
         </div>
 
         {error && (
@@ -311,18 +282,7 @@ export function SecuritySetup({ onComplete, onSkip }: SecuritySetupProps) {
           </div>
         </div>
 
-        <Card className="bg-card border-0">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              {phraseWords.map((word, i) => (
-                <div key={i} className="bg-popover rounded p-2 text-center">
-                  <span className="text-muted-foreground text-xs mr-1">{i + 1}.</span>
-                  <span className="text-white">{word}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <SeedPhraseDisplay phrase={recoveryPhrase} />
 
         <Button variant="secondary" onClick={handleCopyPhrase}>
           {copiedPhrase ? (

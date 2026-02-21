@@ -237,8 +237,8 @@ export interface MeltQuoteInfo {
 export interface SecurityConfig {
   enabled: boolean;
   type: 'pin' | 'password';
-  hash: string;              // SHA-256 hash of PIN/password
-  salt: string;              // Random salt for hashing
+  hash: string;              // PBKDF2-derived key bytes (hex) — also used as the encryption key
+  salt: string;              // Random salt for PBKDF2 derivation (hex)
   recoveryPhraseHash: string; // Hash to verify recovery phrase
   createdAt: number;
 }
