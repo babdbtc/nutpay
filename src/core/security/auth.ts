@@ -1,8 +1,10 @@
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
+import { deriveKeyFromCredential } from '../storage/crypto-utils';
 
 /**
- * Generate a random salt for hashing
+ * Generate a random salt for credential hashing.
+ * Returns a hex-encoded 32-byte salt string.
  */
 export function generateSalt(): string {
   const array = new Uint8Array(32);
@@ -11,26 +13,80 @@ export function generateSalt(): string {
 }
 
 /**
- * Hash a credential (PIN or password) with salt using SHA-256
+ * Hash a credential (PIN or password) with PBKDF2.
+ *
+ * We derive an AES key via PBKDF2 and then export its raw bytes as the
+ * hash. This ensures the same cost (100k iterations) as key derivation,
+ * making brute-force of even a 4-digit PIN computationally expensive.
+ *
+ * The salt is the same one used for encryption key derivation, so
+ * PBKDF2 only needs to run once during verification (derive key →
+ * export → compare hash, then use key for decryption).
  */
 export async function hashCredential(input: string, salt: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input + salt);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const saltBytes = Uint8Array.from(
+    salt.match(/.{2}/g)!.map((b) => parseInt(b, 16))
+  );
+  const key = await deriveKeyFromCredential(input, saltBytes);
+  const exported = await crypto.subtle.exportKey('raw', key);
+  const hashArray = Array.from(new Uint8Array(exported));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * Verify a credential against a stored hash
+ * Verify a credential against a stored hash and return the derived key
+ * if valid. This avoids running PBKDF2 twice (once for hash, once for
+ * key derivation).
+ *
+ * Returns { valid: true, key } on success, { valid: false } on failure.
+ */
+export async function verifyCredentialAndDeriveKey(
+  input: string,
+  storedHash: string,
+  salt: string
+): Promise<{ valid: boolean; key?: CryptoKey }> {
+  const saltBytes = Uint8Array.from(
+    salt.match(/.{2}/g)!.map((b) => parseInt(b, 16))
+  );
+  const key = await deriveKeyFromCredential(input, saltBytes);
+  const exported = await crypto.subtle.exportKey('raw', key);
+  const hashArray = Array.from(new Uint8Array(exported));
+  const inputHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  // Constant-length comparison (not truly constant-time in JS, but
+  // combined with the lockout mechanism this is sufficient).
+  if (inputHash.length !== storedHash.length) return { valid: false };
+  let mismatch = 0;
+  for (let i = 0; i < inputHash.length; i++) {
+    mismatch |= inputHash.charCodeAt(i) ^ storedHash.charCodeAt(i);
+  }
+
+  if (mismatch !== 0) return { valid: false };
+  return { valid: true, key };
+}
+
+/**
+ * Verify a credential against a stored hash.
+ * Convenience wrapper around verifyCredentialAndDeriveKey.
  */
 export async function verifyCredential(
   input: string,
   storedHash: string,
   salt: string
 ): Promise<boolean> {
-  const inputHash = await hashCredential(input, salt);
-  return inputHash === storedHash;
+  const result = await verifyCredentialAndDeriveKey(input, storedHash, salt);
+  return result.valid;
+}
+
+/**
+ * Derive the encryption key from a credential and salt.
+ * Convenience wrapper for use during initial setup.
+ */
+export async function deriveKey(credential: string, salt: string): Promise<CryptoKey> {
+  const saltBytes = Uint8Array.from(
+    salt.match(/.{2}/g)!.map((b) => parseInt(b, 16))
+  );
+  return deriveKeyFromCredential(credential, saltBytes);
 }
 
 /**

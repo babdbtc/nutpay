@@ -26,8 +26,12 @@ export async function getSeed(): Promise<Uint8Array | null> {
   try {
     return await decrypt(encrypted);
   } catch (error) {
-    console.error('[Nutpay] Failed to decrypt seed:', error);
-    return null;
+    // CRITICAL: Do NOT return null here. Returning null causes callers to
+    // silently fall back to random (non-deterministic) secrets, making all
+    // future proofs unrecoverable from the seed. Throw instead so callers
+    // fail visibly rather than silently degrading wallet security.
+    console.error('[Nutpay] Failed to decrypt seed — refusing to return null:', error);
+    throw new Error('Failed to decrypt wallet seed');
   }
 }
 
