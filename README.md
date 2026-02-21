@@ -17,7 +17,6 @@ Nutpay is a full-featured [Cashu](https://cashu.space) wallet that runs as a Chr
 - **Encrypted storage** - Proofs and seed encrypted with AES-GCM-256
 - **PIN / password lock** - Session timeout, lockout protection, credential recovery
 - **Proof state checks** - Periodic reconciliation against mints (NUT-07)
-- **6 themes** - Classic, Violet, Midnight, Ocean, Forest, Bitcoin
 
 ## Automatic 402 Payments
 
