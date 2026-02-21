@@ -1,7 +1,7 @@
 {
   "name": "nutpay",
   "version": "0.1.0",
-  "description": "Chrome extension for automatic Cashu payments on HTTP 402 responses",
+  "description": "Cashu ecash wallet Chrome extension with automatic HTTP 402 micropayments",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",

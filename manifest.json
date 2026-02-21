@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Nutpay",
   "version": "0.1.0",
-  "description": "Automatic Cashu payments for HTTP 402 responses",
+  "description": "Cashu ecash wallet with automatic HTTP 402 micropayments",
   "icons": {
     "16": "assets/icons/icon-16.png",
     "32": "assets/icons/icon-32.png",

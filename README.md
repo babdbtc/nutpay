@@ -1,20 +1,35 @@
 # Nutpay
 
-A Chrome extension that enables automatic micropayments using Cashu ecash tokens. When a website returns an HTTP 402 (Payment Required) response with X-Cashu payment details, Nutpay prompts the user for approval, sends the payment, and automatically retries the request.
+A Cashu ecash wallet for your browser — with automatic HTTP 402 micropayments.
 
 https://github.com/user-attachments/assets/86028d18-6360-425d-be2d-f2008106695a
 
+## Wallet Features
 
-## Why Nutpay?
+Nutpay is a full-featured [Cashu](https://cashu.space) wallet that runs as a Chrome extension:
 
-Traditional web payments have high friction: credit card forms, account creation, minimum amounts, and transaction fees that make micropayments impractical. Nutpay changes this by:
+- **Send & receive ecash** - Generate or redeem Cashu tokens with QR codes
+- **Lightning support** - Receive via Lightning invoice, send to any Lightning address or invoice
+- **Multi-mint** - Manage multiple mints, view per-mint balances and denominations
+- **Deterministic recovery** - 12-word BIP39 seed phrase with full wallet restore (NUT-13)
+- **DLEQ verification** - Cryptographic proof validation on all mint operations (NUT-12)
+- **Transaction history** - Filterable, paginated log of all payments and receives
+- **Encrypted storage** - Proofs and seed encrypted with AES-GCM-256
+- **PIN / password lock** - Session timeout, lockout protection, credential recovery
+- **Proof state checks** - Periodic reconciliation against mints (NUT-07)
+- **6 themes** - Classic, Violet, Midnight, Ocean, Forest, Bitcoin
+
+## Automatic 402 Payments
+
+On top of the wallet, Nutpay adds seamless web micropayments. When a website returns an HTTP 402 (Payment Required) response with an `X-Cashu` header, Nutpay detects it, prompts you for approval, pays, and retries the request — all transparently.
 
 - **One-click payments** - No forms, no accounts, just approve and pay
 - **True micropayments** - Pay 1 sat (fraction of a cent) with zero fees
 - **Privacy preserving** - Cashu tokens are bearer instruments with no identity attached
 - **Seamless UX** - Payment happens in the background, content loads automatically
+- **Auto-approve** - Set spending limits for trusted sites to skip the approval popup
 
-## How It Works
+### How 402 Payments Work
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -69,7 +84,19 @@ Traditional web payments have high friction: credit card forms, account creation
 
 ## Usage
 
-Once configured with funds, Nutpay works automatically:
+### As a Wallet
+
+Click the Nutpay icon to open the wallet popup:
+
+- **View balances** - Total and per-mint balances at a glance
+- **Receive** - Paste a Cashu token or create a Lightning invoice (with QR code)
+- **Send** - Generate an ecash token (with QR code) or pay a Lightning invoice
+- **History** - Browse, filter, and review all past transactions
+- **Mint details** - Tap a mint to see info, proof counts, and denomination breakdown
+
+### Automatic 402 Payments
+
+Once configured with funds, Nutpay handles web payments automatically:
 
 1. Visit a site that uses X-Cashu payments
 2. When content requires payment, an approval popup appears
@@ -77,9 +104,7 @@ Once configured with funds, Nutpay works automatically:
 4. Click "Pay" to approve (or "Deny" to cancel)
 5. The payment is sent and content loads automatically
 
-### Auto-Approve
-
-For trusted sites, check "Auto-approve future payments from this site" to skip the approval popup for future payments.
+For trusted sites, check "Auto-approve future payments from this site" to skip the approval popup. You can configure per-payment and daily spending limits in Settings.
 
 ### Wallet Backup & Recovery
 
@@ -293,13 +318,21 @@ Nutpay comes pre-configured with these mints:
 
 Users can add custom mints in the extension settings. During wallet recovery, these default mints are scanned for recoverable funds.
 
+## Supported NUTs
+
+| NUT | Description | Details |
+|-----|-------------|---------|
+| [NUT-02](https://github.com/cashubtc/nuts/blob/main/02.md) | Keysets & fees | Real fee schedule from mint keysets |
+| [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md) | Proof state check | Periodic + startup reconciliation against mints |
+| [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md) | DLEQ proofs | Verification on all mint-returned proofs |
+| [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) | Deterministic secrets | BIP39 seed-based backup & recovery |
+| [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) | WebSocket subscriptions | Real-time mint quote payment notifications |
+| [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) | Payment requests | CBOR-encoded payment request decoding |
+| [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) | HTTP 402 payments | Automatic detect, pay, and retry flow |
+
 ## Technical Details
 
 - **Manifest V3** - Built for modern Chrome extension standards
-- **NUT-24 / NUT-18** - HTTP 402 payment flow via `X-Cashu` header with CBOR-encoded payment requests
-- **NUT-13 Deterministic Secrets** - BIP39 seed-based wallet recovery
-- **NUT-07 Proof State Reconciliation** - Periodic + startup proof state checks against mints
-- **NUT-02 Fee Calculation** - Real fee schedule from mint keysets, not heuristics
 - **Atomic proof lifecycle** - Proofs marked `PENDING_SPEND` before mint operations; recovered on service worker restart
 - **Encrypted storage** - Proofs and seed encrypted with AES-GCM-256
 - **Proof selection** - Optimizes for minimal change using subset-sum algorithm
@@ -308,11 +341,7 @@ Users can add custom mints in the extension settings. During wallet recovery, th
 
 ## Credits
 
-This extension implements the [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) HTTP payment protocol and [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) payment requests from the [Cashu](https://github.com/cashubtc) ecash specification.
-
-Wallet recovery uses [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) deterministic secrets for seed-based backup and restore.
-
-Built with [cashu-ts](https://github.com/cashubtc/cashu-ts) v3.5, the TypeScript implementation of the Cashu protocol.
+Built with [cashu-ts](https://github.com/cashubtc/cashu-ts) v3.5, the TypeScript implementation of the [Cashu](https://github.com/cashubtc) ecash protocol.
 
 Learn more about Cashu at [cashu.space](https://cashu.space).
 
