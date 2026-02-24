@@ -26,6 +26,9 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   const [copied, setCopied] = useState(false);
 
   const activeQuoteRef = useRef<string | null>(null);
+  // Keep current quote data in a ref so the message listener closure
+  // (which is registered once on mount) can always read fresh values.
+  const quoteRef = useRef<PendingMintQuote | null>(null);
 
   // Listen for MINT_QUOTE_PAID messages from background (NUT-17 or polling)
   useEffect(() => {
@@ -95,6 +98,7 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
 
       if (result.success && result.quote) {
         setQuote(result.quote);
+        quoteRef.current = result.quote;
         setStatus('waiting');
         startSubscription(result.quote.quoteId);
       } else {
@@ -107,16 +111,25 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
     }
   };
 
-  // Called when background notifies us the quote is paid (via NUT-17 WS or polling)
+  // Called when background notifies us the quote is paid (via NUT-17 WS or polling).
+  // Reads amount and mintUrl from quoteRef (not component state) because this
+  // function is captured in the message listener closure registered once on mount.
   const handleQuotePaid = async (quoteId: string) => {
     activeQuoteRef.current = null;
     setStatus('minting');
 
+    const currentQuote = quoteRef.current;
+    if (!currentQuote) {
+      setStatus('error');
+      setError('Quote data lost — please try again');
+      return;
+    }
+
     try {
       const mintResult = await chrome.runtime.sendMessage({
         type: 'MINT_PROOFS',
-        mintUrl: selectedMint,
-        amount: parseInt(amount, 10),
+        mintUrl: currentQuote.mintUrl,
+        amount: currentQuote.amount,
         quoteId,
       });
 
@@ -164,6 +177,7 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
       }).catch(() => {});
       activeQuoteRef.current = null;
     }
+    quoteRef.current = null;
     setQuote(null);
     setStatus('idle');
     setError(null);

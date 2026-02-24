@@ -66,7 +66,12 @@ export type MessageType =
   // NUT-17 WebSocket subscriptions
   | 'SUBSCRIBE_MINT_QUOTE'
   | 'UNSUBSCRIBE_MINT_QUOTE'
-  | 'MINT_QUOTE_PAID';
+  | 'MINT_QUOTE_PAID'
+  // LNURL-pay (LUD-06/16)
+  | 'RESOLVE_LNURL'
+  | 'REQUEST_LNURL_INVOICE'
+  // Spending analytics
+  | 'GET_SPENDING_BY_DOMAIN';
 
 // Base message structure
 export interface BaseMessage {
