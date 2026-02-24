@@ -10,7 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Check, AlertCircle, Copy } from 'lucide-react';
+import { Loader2, Check, AlertCircle, Copy, Zap } from 'lucide-react';
+
+/** LNURL-pay parameters returned from resolving a Lightning address */
+interface LnurlPayParams {
+  callback: string;
+  minSendable: number;
+  maxSendable: number;
+  description: string;
+  domain: string;
+  lightningAddress?: string;
+  commentAllowed?: number;
+}
 
 interface SendModalProps {
   mints: MintConfig[];
@@ -31,6 +42,13 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   const [copied, setCopied] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // LNURL-pay state
+  const [lnurlParams, setLnurlParams] = useState<LnurlPayParams | null>(null);
+  const [lnurlAmount, setLnurlAmount] = useState('');
+  const [lnurlComment, setLnurlComment] = useState('');
+  // The bolt11 invoice obtained from LNURL callback (used for melt)
+  const [resolvedInvoice, setResolvedInvoice] = useState<string | null>(null);
+
   const enabledMints = mints.filter((m) => m.enabled);
   const selectedBalance = balances.get(selectedMint) || 0;
 
@@ -39,7 +57,35 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
     setGeneratedToken(null);
     setMeltQuote(null);
     setSuccess(false);
+    setLnurlParams(null);
+    setResolvedInvoice(null);
   };
+
+  // Detect input type for the Lightning field
+  const getInputType = (input: string): 'lightning-address' | 'bolt11' | 'unknown' => {
+    const trimmed = input.trim().toLowerCase();
+    if (!trimmed) return 'unknown';
+
+    // Lightning address: user@domain.com
+    const parts = trimmed.split('@');
+    if (parts.length === 2 && parts[0].length > 0 && parts[1].includes('.')) {
+      return 'lightning-address';
+    }
+
+    // Bolt11 invoice
+    if (trimmed.startsWith('lnbc') || trimmed.startsWith('lntb') || trimmed.startsWith('lnbs')) {
+      return 'bolt11';
+    }
+
+    // LNURL bech32 — treat as lightning address flow
+    if (trimmed.startsWith('lnurl1') || trimmed.startsWith('lnurl:')) {
+      return 'lightning-address';
+    }
+
+    return 'unknown';
+  };
+
+  const inputType = getInputType(invoice);
 
   const handleGenerateToken = async () => {
     const amountNum = parseInt(amount, 10);
@@ -75,9 +121,115 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
     }
   };
 
+  // Resolve a Lightning address or LNURL to get pay params
+  const handleResolveLnurl = async () => {
+    if (!invoice.trim()) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'RESOLVE_LNURL',
+        input: invoice.trim(),
+      });
+
+      if (result.success && result.params) {
+        const params = result.params as LnurlPayParams;
+        setLnurlParams(params);
+
+        // Pre-fill amount with min if min === max (fixed amount)
+        const minSats = Math.ceil(params.minSendable / 1000);
+        const maxSats = Math.floor(params.maxSendable / 1000);
+        if (minSats === maxSats) {
+          setLnurlAmount(minSats.toString());
+        }
+      } else {
+        setError(result.error || 'Failed to resolve Lightning address');
+      }
+    } catch {
+      setError('Failed to resolve Lightning address');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Request invoice from LNURL callback and get melt quote
+  const handleLnurlPay = async () => {
+    if (!lnurlParams) return;
+
+    const amountSats = parseInt(lnurlAmount, 10);
+    if (!amountSats || amountSats <= 0) {
+      setError('Please enter a valid amount');
+      return;
+    }
+
+    const minSats = Math.ceil(lnurlParams.minSendable / 1000);
+    const maxSats = Math.floor(lnurlParams.maxSendable / 1000);
+
+    if (amountSats < minSats) {
+      setError(`Minimum amount is ${minSats} sats`);
+      return;
+    }
+
+    if (amountSats > maxSats) {
+      setError(`Maximum amount is ${maxSats} sats`);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Step 1: Get bolt11 invoice from LNURL callback
+      const invoiceResult = await chrome.runtime.sendMessage({
+        type: 'REQUEST_LNURL_INVOICE',
+        callback: lnurlParams.callback,
+        amountMsat: amountSats * 1000,
+        comment: lnurlComment || undefined,
+      });
+
+      if (!invoiceResult.success || !invoiceResult.pr) {
+        setError(invoiceResult.error || 'Failed to get invoice from Lightning address');
+        return;
+      }
+
+      const bolt11 = invoiceResult.pr as string;
+      setResolvedInvoice(bolt11);
+
+      // Step 2: Get melt quote for the invoice
+      const quoteResult = await chrome.runtime.sendMessage({
+        type: 'GET_MELT_QUOTE',
+        mintUrl: selectedMint,
+        invoice: bolt11,
+      });
+
+      if (quoteResult.success && quoteResult.quote) {
+        const total = quoteResult.quote.amount + quoteResult.quote.fee;
+        if (total > selectedBalance) {
+          setError(`Insufficient balance. Need ${total} sats (${quoteResult.quote.amount} + ${quoteResult.quote.fee} fee), have ${selectedBalance} sats.`);
+        } else {
+          setMeltQuote(quoteResult.quote);
+        }
+      } else {
+        setError(quoteResult.error || 'Failed to get quote');
+      }
+    } catch {
+      setError('Failed to process payment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGetQuote = async () => {
     if (!invoice.trim()) {
-      setError('Please enter a Lightning invoice');
+      setError('Please enter a Lightning invoice or address');
+      return;
+    }
+
+    // If it's a Lightning address or LNURL, resolve it first
+    if (inputType === 'lightning-address') {
+      await handleResolveLnurl();
       return;
     }
 
@@ -111,6 +263,9 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   const handlePayInvoice = async () => {
     if (!meltQuote) return;
 
+    // Use the resolved LNURL invoice if available, otherwise use the raw input
+    const payInvoice = resolvedInvoice || invoice.trim();
+
     setLoading(true);
     setError(null);
 
@@ -118,7 +273,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
       const result = await chrome.runtime.sendMessage({
         type: 'MELT_PROOFS',
         mintUrl: selectedMint,
-        invoice: invoice.trim(),
+        invoice: payInvoice,
         quoteId: meltQuote.quote,
         amount: meltQuote.amount,
         feeReserve: meltQuote.fee,
@@ -166,6 +321,11 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
         e.preventDefault();
         if (meltQuote) {
           setMeltQuote(null);
+          setResolvedInvoice(null);
+        } else if (lnurlParams) {
+          setLnurlParams(null);
+          setLnurlAmount('');
+          setLnurlComment('');
         } else if (generatedToken || success) {
           onSuccess();
         } else {
@@ -176,7 +336,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [meltQuote, generatedToken, success, loading, onSuccess, onClose]);
+  }, [meltQuote, lnurlParams, generatedToken, success, loading, onSuccess, onClose]);
 
   // Show generated token
   if (generatedToken) {
@@ -229,6 +389,16 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
   if (meltQuote) {
     return (
       <div className="flex flex-col gap-4">
+        {/* Show destination info for LNURL payments */}
+        {lnurlParams && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm">
+            <Zap className="h-4 w-4 shrink-0" />
+            <span className="truncate">
+              {lnurlParams.lightningAddress || lnurlParams.domain}
+            </span>
+          </div>
+        )}
+
         <Card className="bg-card border-0">
           <CardContent className="p-4 space-y-2">
             <div className="flex justify-between py-2 border-b border-[#333]">
@@ -254,7 +424,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
         )}
 
         <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={() => setMeltQuote(null)} disabled={loading}>
+          <Button variant="secondary" className="flex-1" onClick={() => { setMeltQuote(null); setResolvedInvoice(null); }} disabled={loading}>
             Cancel
             <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
               Esc
@@ -272,6 +442,119 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
       </div>
     );
   }
+
+  // Show LNURL-pay amount entry (after resolving a Lightning address)
+  if (lnurlParams) {
+    const minSats = Math.ceil(lnurlParams.minSendable / 1000);
+    const maxSats = Math.floor(lnurlParams.maxSendable / 1000);
+    const isFixedAmount = minSats === maxSats;
+
+    return (
+      <div className="flex flex-col gap-4">
+        {/* Recipient info */}
+        <Card className="bg-card border-0">
+          <CardContent className="p-3 space-y-1">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-medium text-white truncate">
+                {lnurlParams.lightningAddress || lnurlParams.domain}
+              </span>
+            </div>
+            {lnurlParams.description && (
+              <p className="text-xs text-muted-foreground pl-6">
+                {lnurlParams.description}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Amount */}
+        <div className="space-y-2">
+          <Label className="text-muted-foreground">Amount (sats)</Label>
+          <Input
+            type="number"
+            placeholder={isFixedAmount ? `${minSats} sats (fixed)` : `${minSats} - ${maxSats} sats`}
+            value={lnurlAmount}
+            onChange={(e) => setLnurlAmount(e.target.value)}
+            min={minSats}
+            max={Math.min(maxSats, selectedBalance)}
+            className="bg-card border-input"
+            disabled={isFixedAmount}
+          />
+          {!isFixedAmount && (
+            <p className="text-xs text-muted-foreground">
+              Range: {minSats.toLocaleString()} - {maxSats.toLocaleString()} sats
+            </p>
+          )}
+        </div>
+
+        {/* Optional comment */}
+        {lnurlParams.commentAllowed && lnurlParams.commentAllowed > 0 && (
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">Comment (optional)</Label>
+            <Input
+              type="text"
+              placeholder="Add a comment..."
+              value={lnurlComment}
+              onChange={(e) => setLnurlComment(e.target.value.slice(0, lnurlParams.commentAllowed!))}
+              maxLength={lnurlParams.commentAllowed}
+              className="bg-card border-input"
+            />
+            <p className="text-xs text-muted-foreground text-right">
+              {lnurlComment.length}/{lnurlParams.commentAllowed}
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={() => { setLnurlParams(null); setLnurlAmount(''); setLnurlComment(''); setError(null); }}
+            disabled={loading}
+          >
+            Back
+            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+              Esc
+            </Badge>
+          </Button>
+          <Button className="flex-1" onClick={handleLnurlPay} disabled={loading || !lnurlAmount}>
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing...</> : 'Continue'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Hint text for the Lightning input based on detected type
+  const getLightningHint = () => {
+    if (!invoice.trim()) return null;
+    if (inputType === 'lightning-address') {
+      return <span className="text-primary">Lightning address detected</span>;
+    }
+    if (inputType === 'bolt11') {
+      return <span className="text-muted-foreground">Bolt11 invoice</span>;
+    }
+    return null;
+  };
+
+  const getLightningButtonText = () => {
+    if (loading) {
+      const label = inputType === 'lightning-address' ? 'Resolving...' : 'Getting Quote...';
+      return <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {label}</>;
+    }
+    if (inputType === 'lightning-address') {
+      return 'Resolve Address';
+    }
+    return 'Get Quote';
+  };
 
   return (
     <Tabs defaultValue="ecash" className="w-full" onValueChange={handleTabChange}>
@@ -328,13 +611,16 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
 
         <TabsContent value="lightning" className="mt-0 space-y-4">
           <div className="space-y-2">
-            <Label className="text-muted-foreground">Lightning Invoice</Label>
+            <Label className="text-muted-foreground">Invoice or Lightning Address</Label>
             <Textarea
-              placeholder="Paste Lightning invoice (lnbc...)"
+              placeholder="lnbc... or user@domain.com"
               value={invoice}
               onChange={(e) => setInvoice(e.target.value)}
               className="bg-card border-input min-h-[80px]"
             />
+            {getLightningHint() && (
+              <p className="text-xs">{getLightningHint()}</p>
+            )}
           </div>
 
           {error && (
@@ -345,7 +631,7 @@ export function SendModal({ mints, balances, displayFormat, onSuccess, onClose }
           )}
 
           <Button className="w-full" onClick={handleGetQuote} disabled={loading || !invoice.trim()}>
-            {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Getting Quote...</> : 'Get Quote'}
+            {getLightningButtonText()}
           </Button>
         </TabsContent>
 

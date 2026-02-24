@@ -18,7 +18,7 @@ import {
   subscribeMintQuote,
   unsubscribeMintQuote,
 } from '../core/wallet/cashu-wallet';
-import { getRecentTransactions, getFilteredTransactions } from '../core/storage/transaction-store';
+import { getRecentTransactions, getFilteredTransactions, getSpendingByDomain } from '../core/storage/transaction-store';
 import { getSettings, updateSettings, getMints, addMint, updateMint, removeMint } from '../core/storage/settings-store';
 import type { MintConfig } from '../shared/types';
 import { getAllowlist, setAllowlistEntry, removeAllowlistEntry, createDefaultAllowlistEntry } from '../core/storage/allowlist-store';
@@ -69,6 +69,7 @@ import {
   cancelRecovery,
   isRecoveryInProgress,
 } from '../core/wallet/recovery-service';
+import { resolveLnurlPay, requestLnurlInvoice } from '../core/protocol/lnurl';
 import { storeSeed, hasSeed, getWalletVersion } from '../core/storage/seed-store';
 import { getCounters } from '../core/storage/counter-store';
 import type { SecurityConfig } from '../shared/types';
@@ -342,7 +343,11 @@ async function handleMessage(
       }
 
       const valid = await isSessionValid();
-      return { valid, securityEnabled: true, authType: config.type };
+      // Session time may still be valid, but after a browser restart
+      // chrome.storage.session is wiped — the encryption key is gone.
+      // Treat as locked so the user re-authenticates and the key is re-derived.
+      const keyAvailable = await hasSessionKey();
+      return { valid: valid && keyAvailable, securityEnabled: true, authType: config.type };
     }
 
     case 'CLEAR_SESSION': {
@@ -601,6 +606,41 @@ async function handleMessage(
     case 'CANCEL_RECOVERY': {
       cancelRecovery();
       return { success: true };
+    }
+
+    // Spending analytics
+    case 'GET_SPENDING_BY_DOMAIN':
+      return getSpendingByDomain();
+
+    // LNURL-pay (LUD-06/16)
+    case 'RESOLVE_LNURL': {
+      const msg = message as ExtensionMessage & { input: string };
+      try {
+        const params = await resolveLnurlPay(msg.input);
+        return { success: true, params };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to resolve Lightning address',
+        };
+      }
+    }
+
+    case 'REQUEST_LNURL_INVOICE': {
+      const msg = message as ExtensionMessage & {
+        callback: string;
+        amountMsat: number;
+        comment?: string;
+      };
+      try {
+        const result = await requestLnurlInvoice(msg.callback, msg.amountMsat, msg.comment);
+        return { success: true, ...result };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to get invoice from LNURL service',
+        };
+      }
     }
 
     // NUT-17 WebSocket subscriptions

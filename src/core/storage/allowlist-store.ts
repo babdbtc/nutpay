@@ -63,13 +63,14 @@ export async function isAutoApproved(
   const today = new Date().toISOString().split('T')[0];
 
   if (entry.lastResetDate !== today) {
-    // Reset daily counter
+    // Reset daily counter for the new day
     await setAllowlistEntry({
       ...entry,
       dailySpent: 0,
       lastResetDate: today,
     });
-    return entry.dailySpent + amount <= entry.maxPerDay;
+    // After reset, only check the new payment against the daily limit
+    return amount <= entry.maxPerDay;
   }
 
   return entry.dailySpent + amount <= entry.maxPerDay;

@@ -9,7 +9,7 @@ https://github.com/user-attachments/assets/86028d18-6360-425d-be2d-f2008106695a
 Nutpay is a full-featured [Cashu](https://cashu.space) wallet that runs as a Chrome extension:
 
 - **Send & receive ecash** - Generate or redeem Cashu tokens with QR codes
-- **Lightning support** - Receive via Lightning invoice, send to any Lightning address or invoice
+- **Lightning support** - Receive via Lightning invoice, send to any Lightning address (`user@domain.com`) or bolt11 invoice (LNURL-pay / LUD-16)
 - **Multi-mint** - Manage multiple mints, view per-mint balances and denominations
 - **Deterministic recovery** - 12-word BIP39 seed phrase with full wallet restore (NUT-13)
 - **DLEQ verification** - Cryptographic proof validation on all mint operations (NUT-12)
@@ -89,7 +89,7 @@ Click the Nutpay icon to open the wallet popup:
 
 - **View balances** - Total and per-mint balances at a glance
 - **Receive** - Paste a Cashu token or create a Lightning invoice (with QR code)
-- **Send** - Generate an ecash token (with QR code) or pay a Lightning invoice
+- **Send** - Generate an ecash token (with QR code), pay a Lightning invoice, or send to a Lightning address
 - **History** - Browse, filter, and review all past transactions
 - **Mint details** - Tap a mint to see info, proof counts, and denomination breakdown
 

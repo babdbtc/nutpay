@@ -74,6 +74,53 @@ export async function getTodaySpent(): Promise<number> {
     .reduce((sum, tx) => sum + tx.amount, 0);
 }
 
+// Spending summary per domain
+export interface DomainSpending {
+  origin: string;
+  hostname: string;
+  totalSpent: number;
+  transactionCount: number;
+  lastPayment: number;
+}
+
+// Get spending analytics grouped by domain
+export async function getSpendingByDomain(): Promise<DomainSpending[]> {
+  const transactions = await getTransactions();
+
+  const domainMap = new Map<string, DomainSpending>();
+
+  for (const tx of transactions) {
+    if (tx.type !== 'payment' || tx.status !== 'completed' || !tx.origin) {
+      continue;
+    }
+
+    const existing = domainMap.get(tx.origin);
+    let hostname: string;
+    try {
+      hostname = new URL(tx.origin).hostname;
+    } catch {
+      hostname = tx.origin;
+    }
+
+    if (existing) {
+      existing.totalSpent += tx.amount;
+      existing.transactionCount += 1;
+      existing.lastPayment = Math.max(existing.lastPayment, tx.timestamp);
+    } else {
+      domainMap.set(tx.origin, {
+        origin: tx.origin,
+        hostname,
+        totalSpent: tx.amount,
+        transactionCount: 1,
+        lastPayment: tx.timestamp,
+      });
+    }
+  }
+
+  // Sort by total spent descending
+  return Array.from(domainMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+}
+
 // Filter interface for transactions
 export interface TransactionFilters {
   type?: 'payment' | 'receive';

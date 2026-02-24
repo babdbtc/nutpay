@@ -5,7 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+
+interface DomainSpending {
+  origin: string;
+  hostname: string;
+  totalSpent: number;
+  transactionCount: number;
+  lastPayment: number;
+}
 
 interface TransactionHistoryProps {
   displayFormat: 'symbol' | 'text';
@@ -26,11 +34,14 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
   const [total, setTotal] = useState(0);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [domainSpending, setDomainSpending] = useState<DomainSpending[]>([]);
+  const [showDomainSpending, setShowDomainSpending] = useState(false);
 
   const LIMIT = 20;
 
   useEffect(() => {
     loadTransactions(true);
+    loadDomainSpending();
   }, [filters]);
 
   // Keyboard shortcuts
@@ -71,6 +82,17 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
       console.error('Failed to load transactions:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDomainSpending = async () => {
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'GET_SPENDING_BY_DOMAIN',
+      });
+      setDomainSpending(result || []);
+    } catch (error) {
+      console.error('Failed to load domain spending:', error);
     }
   };
 
@@ -210,6 +232,53 @@ export function TransactionHistory({ displayFormat, onBack }: TransactionHistory
               <p className="text-[11px] text-muted-foreground mb-1">Transactions</p>
               <p className="text-sm font-semibold text-white">{total}</p>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Spending by Site */}
+      {domainSpending.length > 0 && (
+        <Card className="bg-card border-0">
+          <CardContent className="p-0">
+            <button
+              className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors rounded-lg"
+              onClick={() => setShowDomainSpending(!showDomainSpending)}
+            >
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold text-muted-foreground">Spending by Site</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                  {domainSpending.length}
+                </Badge>
+              </div>
+              {showDomainSpending ? (
+                <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </button>
+            {showDomainSpending && (
+              <div className="px-3 pb-3 space-y-1.5">
+                {domainSpending.map((domain) => (
+                  <div
+                    key={domain.origin}
+                    className="flex items-center justify-between py-1.5 px-2 bg-popover rounded"
+                  >
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-xs font-medium text-white truncate">
+                        {domain.hostname}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {domain.transactionCount} payment{domain.transactionCount !== 1 ? 's' : ''} · last {formatTime(domain.lastPayment)}
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold text-red-400 shrink-0 ml-2">
+                      -{formatAmount(domain.totalSpent, displayFormat)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
