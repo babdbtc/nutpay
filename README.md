@@ -313,7 +313,7 @@ Nutpay comes pre-configured with these mints:
 
 - `https://mint.minibits.cash/Bitcoin` (Minibits)
 - `https://mint.coinos.io` (Coinos)
-- `https://mint.lnvoltz.com` (LNVoltz)
+- `https://mint.lnbits.com` (LNbits Demo)
 
 Users can add custom mints in the extension settings. During wallet recovery, these default mints are scanned for recoverable funds.
 
