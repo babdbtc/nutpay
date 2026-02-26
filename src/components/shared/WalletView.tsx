@@ -261,7 +261,7 @@ export function WalletView({
       {/* Action Buttons */}
       <div className="flex gap-3">
         <Button
-          className="flex-1 bg-green-500 hover:bg-green-600"
+          className="flex-1"
           onClick={() => setShowReceive(true)}
         >
           <ArrowDownLeft className="mr-2 h-4 w-4" />
@@ -367,7 +367,7 @@ export function WalletView({
                   </Badge>
                 </Button>
                 <Button
-                  className="flex-1 bg-green-500 hover:bg-green-600"
+                  className="flex-1"
                   onClick={handleReceive}
                   disabled={receiving || !tokenInput.trim()}
                 >

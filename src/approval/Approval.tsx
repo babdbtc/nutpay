@@ -72,7 +72,7 @@ function Approval() {
         // Merge with defaults to ensure new settings fields have values
         const merged = { ...DEFAULT_SETTINGS, ...data };
         setSettings(merged);
-        applyTheme(merged.theme || 'classic');
+        applyTheme(merged.theme || 'midnight');
       }
     });
   }, []);
@@ -248,7 +248,7 @@ function Approval() {
           </Badge>
         </Button>
         <Button
-          className="flex-1 bg-green-500 hover:bg-green-600"
+          className="flex-1"
           onClick={handleApprove}
         >
           Pay

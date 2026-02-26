@@ -87,7 +87,7 @@ function Options() {
         setSecurityType(securityData.type || 'pin');
       }
       // Apply theme
-      applyTheme(loadedSettings.theme || 'classic');
+      applyTheme(loadedSettings.theme || 'midnight');
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -490,6 +490,21 @@ function Options() {
             <Switch
               checked={settings.autoDiscoverMints}
               onCheckedChange={(v) => updateSetting('autoDiscoverMints', v)}
+            />
+          </div>
+
+          <Separator className="bg-border" />
+
+          <div className="flex items-center justify-between py-2">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Auto-claim ecash tokens</Label>
+              <p className="text-xs text-muted-foreground">
+                Automatically claim ecash tokens found on web pages
+              </p>
+            </div>
+            <Switch
+              checked={settings.autoClaimTokens}
+              onCheckedChange={(v) => updateSetting('autoClaimTokens', v)}
             />
           </div>
 
