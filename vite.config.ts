@@ -111,7 +111,13 @@ export default defineConfig({
       },
     },
     sourcemap: process.env.NODE_ENV === 'development',
-    minify: true,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false,
+        pure_funcs: ['console.log', 'console.debug'],
+      },
+    },
     target: 'esnext',
   },
   resolve: {
