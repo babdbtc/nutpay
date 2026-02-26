@@ -12,6 +12,7 @@ import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/prot
 import { openApprovalPopup, waitForApproval, openUnlockPopup, waitForUnlock } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { getMints } from '../core/storage/settings-store';
+import { mintSupportsNut } from '../core/wallet/mint-manager';
 import { normalizeMintUrl } from '../shared/format';
 import { getSecurityConfig, isSessionValid, isAccountLocked } from '../core/storage/security-store';
 
@@ -185,6 +186,24 @@ export async function handlePaymentRequired(
       requestId,
       error: errorMsg,
     };
+  }
+
+  // If NUT-10 locking is required, verify the selected mint supports it
+  if (paymentRequest.nut10 && feasibility.selectedMint) {
+    const requiredNut = paymentRequest.nut10.kind === 'P2PK' ? 11
+      : paymentRequest.nut10.kind === 'HTLC' ? 14
+      : null;
+
+    if (requiredNut) {
+      const supported = await mintSupportsNut(feasibility.selectedMint, requiredNut);
+      if (!supported) {
+        return {
+          type: 'PAYMENT_FAILED',
+          requestId,
+          error: `This payment requires NUT-${requiredNut} (${paymentRequest.nut10.kind}) locking but the mint "${feasibility.mintName}" does not support it.`,
+        };
+      }
+    }
   }
 
   // Check spending limits

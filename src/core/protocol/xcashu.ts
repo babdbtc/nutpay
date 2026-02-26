@@ -23,6 +23,7 @@ export function decodePaymentRequestHeader(
       id: pr.id || undefined,
       description: pr.description || undefined,
       singleUse: pr.singleUse ?? undefined,
+      nut10: pr.nut10 || undefined,
     };
   } catch (error) {
     console.warn('[Nutpay] Failed to decode NUT-18 payment request:', error);
@@ -59,6 +60,33 @@ export function validatePaymentRequest(
 
   if (!request.unit) {
     return { valid: false, error: 'Missing unit' };
+  }
+
+  // Validate NUT-10 locking condition if present
+  if (request.nut10) {
+    const { kind, data } = request.nut10;
+    if (!kind || !data) {
+      return { valid: false, error: 'Invalid NUT-10 condition: missing kind or data' };
+    }
+
+    // Only P2PK and HTLC kinds are known
+    if (kind !== 'P2PK' && kind !== 'HTLC') {
+      return { valid: false, error: `Unsupported NUT-10 kind: ${kind}` };
+    }
+
+    // For P2PK, data must be a valid hex-encoded public key (33 bytes compressed)
+    if (kind === 'P2PK') {
+      if (!/^0[23][0-9a-fA-F]{64}$/.test(data)) {
+        return { valid: false, error: 'Invalid P2PK public key in NUT-10 condition' };
+      }
+    }
+
+    // For HTLC, data must be a valid hex hash (32 bytes SHA256)
+    if (kind === 'HTLC') {
+      if (!/^[0-9a-fA-F]{64}$/.test(data)) {
+        return { valid: false, error: 'Invalid HTLC hash in NUT-10 condition' };
+      }
+    }
   }
 
   return { valid: true };

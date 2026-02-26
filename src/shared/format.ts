@@ -55,3 +55,29 @@ export function formatTransactionAmount(
 
   return `${prefix}${formatted} sats`;
 }
+
+/**
+ * Format a timestamp as a relative time string
+ */
+export function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return date.toLocaleDateString();
+}
+
+/**
+ * Extract hostname from an origin URL
+ */
+export function getOriginHost(origin?: string): string {
+  if (!origin) return 'Unknown';
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return origin;
+  }
+}

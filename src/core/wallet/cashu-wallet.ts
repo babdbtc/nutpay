@@ -1,4 +1,4 @@
-import { getEncodedTokenV4, getDecodedToken, hasValidDleq, type Proof, type MintQuoteResponse, type MeltQuoteResponse, type Wallet } from '@cashu/cashu-ts';
+import { getEncodedTokenV4, getDecodedToken, hasValidDleq, type Proof, type MintQuoteResponse, type MeltQuoteResponse, type Wallet, type NUT10Option, type P2PKOptions, type SigFlag } from '@cashu/cashu-ts';
 import { getWalletForMint, discoverMint, findMintForPayment, mintSupportsNut } from './mint-manager';
 import {
   selectProofs,
@@ -50,12 +50,104 @@ interface BuildTokenResult {
 }
 
 /**
+ * Convert a NUT-10 locking condition from a payment request into P2PKOptions
+ * that the cashu-ts send builder understands.
+ *
+ * NUT-10 `NUT10Option` has: kind, data, tags[][]
+ * For P2PK (NUT-11): data = pubkey, tags can include sigflag, locktime, pubkeys, refund, n_sigs, etc.
+ * For HTLC (NUT-14): data = hash, converted via P2PKOptions.hashlock
+ */
+function nut10ToP2PKOptions(nut10: NUT10Option): P2PKOptions {
+  const tags = nut10.tags || [];
+
+  // Helper to find a tag value by key
+  const getTag = (key: string): string[] | undefined => {
+    const tag = tags.find((t) => t[0] === key);
+    return tag ? tag.slice(1) : undefined;
+  };
+
+  if (nut10.kind === 'P2PK') {
+    const opts: P2PKOptions = {
+      pubkey: nut10.data,
+    };
+
+    // Parse additional P2PK tags from NUT-11
+    const sigflag = getTag('sigflag');
+    if (sigflag?.[0]) {
+      opts.sigFlag = sigflag[0] as SigFlag;
+    }
+
+    const locktime = getTag('locktime');
+    if (locktime?.[0]) {
+      opts.locktime = parseInt(locktime[0], 10);
+    }
+
+    const pubkeys = getTag('pubkeys');
+    if (pubkeys && pubkeys.length > 0) {
+      // The main pubkey is in data, additional ones in the pubkeys tag
+      opts.pubkey = [nut10.data, ...pubkeys];
+    }
+
+    const nSigs = getTag('n_sigs');
+    if (nSigs?.[0]) {
+      opts.requiredSignatures = parseInt(nSigs[0], 10);
+    }
+
+    const refund = getTag('refund');
+    if (refund && refund.length > 0) {
+      opts.refundKeys = refund;
+    }
+
+    const nSigsRefund = getTag('n_sigs_refund');
+    if (nSigsRefund?.[0]) {
+      opts.requiredRefundSignatures = parseInt(nSigsRefund[0], 10);
+    }
+
+    return opts;
+  }
+
+  if (nut10.kind === 'HTLC') {
+    // HTLC (NUT-14) uses the same P2PKOptions with hashlock field
+    const opts: P2PKOptions = {
+      pubkey: [],
+      hashlock: nut10.data,
+    };
+
+    const sigflag = getTag('sigflag');
+    if (sigflag?.[0]) {
+      opts.sigFlag = sigflag[0] as SigFlag;
+    }
+
+    const locktime = getTag('locktime');
+    if (locktime?.[0]) {
+      opts.locktime = parseInt(locktime[0], 10);
+    }
+
+    const pubkeys = getTag('pubkeys');
+    if (pubkeys && pubkeys.length > 0) {
+      opts.pubkey = pubkeys;
+    }
+
+    const refund = getTag('refund');
+    if (refund && refund.length > 0) {
+      opts.refundKeys = refund;
+    }
+
+    return opts;
+  }
+
+  // Unsupported kind — should have been caught by validation, but be defensive
+  throw new Error(`Unsupported NUT-10 kind: ${nut10.kind}`);
+}
+
+/**
  * Select proofs, swap with the mint, verify DLEQ, encode token, and finalize.
  *
  * This is the shared core of createPaymentToken() and generateSendToken().
  * It handles:
  *   - Atomic proof selection with fee-aware re-selection
  *   - NUT-13 deterministic vs legacy random secrets
+ *   - NUT-10/NUT-11 P2PK and NUT-14 HTLC locking conditions
  *   - NUT-12 DLEQ verification on change proofs
  *   - PENDING_SPEND marking and revert on failure
  *
@@ -67,7 +159,8 @@ interface BuildTokenResult {
 async function buildSendToken(
   mintUrl: string,
   amount: number,
-  unit: string
+  unit: string,
+  nut10?: NUT10Option
 ): Promise<BuildTokenResult> {
   const wallet = await getWalletForMint(mintUrl);
 
@@ -100,19 +193,39 @@ async function buildSendToken(
   let sendProofs: Proof[];
   let changeProofs: Proof[];
 
+  // Convert NUT-10 condition to P2PKOptions if present
+  const p2pkOptions = nut10 ? nut10ToP2PKOptions(nut10) : undefined;
+
   try {
     if (seedExists) {
-      const result = await wallet.ops
+      const builder = wallet.ops
         .send(amount, selection.proofs)
-        .asDeterministic(0)
-        .includeFees(true)
-        .run();
+        .includeFees(true);
+
+      // Apply NUT-10 locking to sent proofs, keep change deterministic
+      if (p2pkOptions) {
+        builder.asP2PK(p2pkOptions);
+        builder.keepAsDeterministic(0);
+      } else {
+        builder.asDeterministic(0);
+      }
+
+      const result = await builder.run();
       sendProofs = result.send;
       changeProofs = result.keep;
     } else {
-      const result = await wallet.send(amount, selection.proofs, { includeFees: true });
-      sendProofs = result.send;
-      changeProofs = result.keep;
+      // Legacy path (no seed)
+      if (p2pkOptions) {
+        const result = await wallet.send(amount, selection.proofs, { includeFees: true }, {
+          send: { type: 'p2pk', options: p2pkOptions },
+        });
+        sendProofs = result.send;
+        changeProofs = result.keep;
+      } else {
+        const result = await wallet.send(amount, selection.proofs, { includeFees: true });
+        sendProofs = result.send;
+        changeProofs = result.keep;
+      }
     }
     // NUT-12: Verify DLEQ on change proofs
     await verifyDleqIfSupported(wallet, changeProofs, mintUrl);
@@ -184,7 +297,7 @@ export async function createPaymentToken(
   });
 
   try {
-    const { token } = await buildSendToken(actualMint, amount, unit);
+    const { token } = await buildSendToken(actualMint, amount, unit, paymentRequest.nut10);
 
     await updateTransactionStatus(transaction.id, 'completed');
 

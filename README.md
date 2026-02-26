@@ -37,6 +37,7 @@ When a website returns an HTTP 402 (Payment Required) response with an `X-Cashu`
 - **Privacy preserving** - Cashu tokens are bearer instruments with no identity attached
 - **Seamless UX** - Payment happens in the background, content loads automatically
 - **Auto-approve** - Set spending limits for trusted sites to skip the approval popup
+- **NUT-10 locking conditions** - Supports P2PK (NUT-11) and HTLC (NUT-14) locked payments when required by the server
 
 ### How 402 Payments Work
 
@@ -217,6 +218,37 @@ function buildPaymentRequestHeader(mintUrl, amount, unit) {
 }
 ```
 
+#### Requiring P2PK-Locked Tokens (NUT-10 / NUT-11)
+
+If your server needs to receive tokens locked to a specific public key (e.g., for offline verification or to ensure only the intended recipient can redeem), include a `nut10` field in the payment request:
+
+```javascript
+import { PaymentRequest } from '@cashu/cashu-ts';
+
+function buildLockedPaymentRequest(mintUrl, amount, unit, pubkey) {
+  const pr = new PaymentRequest(
+    [],          // transport: empty = in-band (NUT-24)
+    undefined,   // id
+    amount,
+    unit,
+    [mintUrl],
+    undefined,   // description
+    true,        // singleUse
+    {            // nut10: NUT-10 locking condition
+      kind: 'P2PK',
+      data: pubkey,  // compressed public key (hex, 02/03 prefix)
+      tags: [['sigflag', 'SIG_INPUTS']],
+    }
+  );
+  return pr.toEncodedRequest();
+}
+```
+
+When Nutpay encounters a payment request with `nut10`, it:
+1. Verifies the mint supports the required NUT (NUT-11 for P2PK, NUT-14 for HTLC)
+2. Shows the lock type in the approval popup
+3. Creates proofs locked to the specified public key using the mint's swap operation
+
 ### Step 2: Accept X-Cashu Request Header
 
 When Nutpay retries the request after payment, it includes the ecash token:
@@ -376,6 +408,8 @@ Users can add custom mints in the extension settings. During wallet recovery, th
 |-----|-------------|---------|
 | [NUT-02](https://github.com/cashubtc/nuts/blob/main/02.md) | Keysets & fees | Real fee schedule from mint keysets |
 | [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md) | Proof state check | Periodic + startup reconciliation against mints |
+| [NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md) | Spending conditions | Well-known secret format for P2PK and HTLC locks |
+| [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md) | Pay to Public Key | P2PK-locked tokens for NUT-24 402 payments |
 | [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md) | DLEQ proofs | Verification on all mint-returned proofs |
 | [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) | Deterministic secrets | BIP39 seed-based backup & recovery |
 | [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) | WebSocket subscriptions | Real-time mint quote payment notifications |

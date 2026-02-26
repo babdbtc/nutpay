@@ -28,7 +28,8 @@ function scanNode(node: Node): Array<{ token: string; element: Element | null }>
   } else if (node.nodeType === Node.ELEMENT_NODE) {
     const el = node as Element;
     // Skip script, style, and our own toast
-    if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'NUTPAY-TOAST'].includes(el.tagName)) return results;
+    if (['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(el.tagName)) return results;
+    if (el.id === 'nutpay-ecash-toast') return results;
     // Skip hidden elements
     if ((el as HTMLElement).hidden) return results;
 
@@ -51,79 +52,69 @@ function showClaimToast(tokens: Array<{ token: string; element: Element | null }
   pendingTokens = tokens;
   const count = tokens.length;
 
-  // Create a custom element to avoid style conflicts
-  const toast = document.createElement('div');
-  toast.id = 'nutpay-ecash-toast';
-  toast.setAttribute('style', `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 2147483647;
-    background: linear-gradient(135deg, #1a1a2e 0%, #252542 100%);
-    color: #fff;
-    border: 1px solid rgba(249, 115, 22, 0.4);
-    border-radius: 12px;
-    padding: 14px 18px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 14px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    max-width: 360px;
-    animation: nutpay-slide-in 0.3s ease-out;
-    cursor: default;
-  `);
-
-  // Add animation keyframes
+  // Add animation keyframes once
   if (!document.getElementById('nutpay-toast-styles')) {
     const style = document.createElement('style');
     style.id = 'nutpay-toast-styles';
     style.textContent = `
       @keyframes nutpay-slide-in {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
+        from { transform: translateY(-100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
       }
       @keyframes nutpay-slide-out {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(100%); opacity: 0; }
+        from { transform: translateY(0); opacity: 1; }
+        to { transform: translateY(-100%); opacity: 0; }
       }
     `;
     document.head.appendChild(style);
   }
 
+  const toast = document.createElement('div');
+  toast.id = 'nutpay-ecash-toast';
+  toast.setAttribute('style', `
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 2147483647;
+    background: #1c1c2e;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 320px;
+    animation: nutpay-slide-in 0.25s ease-out;
+  `);
+
   toast.innerHTML = `
-    <div style="flex-shrink: 0; width: 36px; height: 36px; background: rgba(249, 115, 22, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M8 12l4-8 4 8"/>
-        <path d="M8 16h8"/>
-      </svg>
-    </div>
     <div style="flex: 1; min-width: 0;">
-      <div style="font-weight: 600; margin-bottom: 2px;">Ecash found on page</div>
-      <div style="font-size: 12px; color: #aaa;">${count} token${count > 1 ? 's' : ''} detected</div>
+      <div style="font-weight: 600; font-size: 13px; margin-bottom: 1px;">Ecash found</div>
+      <div style="font-size: 11px; color: #888;">${count} token${count > 1 ? 's' : ''} on this page</div>
     </div>
     <button id="nutpay-claim-btn" style="
       flex-shrink: 0;
-      background: linear-gradient(135deg, #f97316 0%, #ff6b00 100%);
+      background: #f97316;
       color: white;
       border: none;
       border-radius: 6px;
-      padding: 8px 14px;
-      font-size: 13px;
+      padding: 6px 12px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.15s;
     ">Claim</button>
     <button id="nutpay-dismiss-btn" style="
       flex-shrink: 0;
       background: none;
       border: none;
-      color: #666;
+      color: #555;
       cursor: pointer;
-      padding: 4px;
-      font-size: 18px;
+      padding: 2px;
+      font-size: 16px;
       line-height: 1;
     ">&times;</button>
   `;
@@ -134,30 +125,18 @@ function showClaimToast(tokens: Array<{ token: string; element: Element | null }
   // Claim button
   const claimBtn = document.getElementById('nutpay-claim-btn');
   if (claimBtn) {
-    claimBtn.addEventListener('click', () => {
-      claimAllTokens();
-    });
-    claimBtn.addEventListener('mouseenter', () => {
-      claimBtn.style.transform = 'scale(1.05)';
-    });
-    claimBtn.addEventListener('mouseleave', () => {
-      claimBtn.style.transform = 'scale(1)';
-    });
+    claimBtn.addEventListener('click', () => claimAllTokens());
   }
 
   // Dismiss button
   const dismissBtn = document.getElementById('nutpay-dismiss-btn');
   if (dismissBtn) {
-    dismissBtn.addEventListener('click', () => {
-      dismissToast();
-    });
+    dismissBtn.addEventListener('click', () => dismissToast());
   }
 
   // Auto-dismiss after 30 seconds
   setTimeout(() => {
-    if (toastElement === toast) {
-      dismissToast();
-    }
+    if (toastElement === toast) dismissToast();
   }, 30000);
 }
 
@@ -178,8 +157,8 @@ function showClaimingState(): void {
   if (!toastElement) return;
   const claimBtn = document.getElementById('nutpay-claim-btn');
   if (claimBtn) {
-    claimBtn.textContent = 'Claiming...';
-    claimBtn.style.opacity = '0.7';
+    claimBtn.textContent = '...';
+    claimBtn.style.opacity = '0.6';
     (claimBtn as HTMLButtonElement).disabled = true;
   }
 }
@@ -187,37 +166,35 @@ function showClaimingState(): void {
 // Update toast to show success
 function showClaimSuccess(amount: number): void {
   if (!toastElement) return;
-  toastElement.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+  toastElement.style.borderColor = 'rgba(34, 197, 94, 0.3)';
   const content = toastElement.querySelector('div[style*="flex: 1"]');
   if (content) {
     content.innerHTML = `
-      <div style="font-weight: 600; color: #22c55e; margin-bottom: 2px;">Tokens claimed!</div>
-      <div style="font-size: 12px; color: #aaa;">Received ${amount} sats</div>
+      <div style="font-weight: 600; font-size: 13px; color: #22c55e;">Claimed ${amount} sats</div>
     `;
   }
   const claimBtn = document.getElementById('nutpay-claim-btn');
   if (claimBtn) claimBtn.remove();
 
-  // Auto-dismiss after success
-  setTimeout(() => dismissToast(), 4000);
+  setTimeout(() => dismissToast(), 3000);
 }
 
 // Update toast to show error
 function showClaimError(error: string): void {
   if (!toastElement) return;
-  toastElement.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+  toastElement.style.borderColor = 'rgba(239, 68, 68, 0.3)';
   const claimBtn = document.getElementById('nutpay-claim-btn');
   if (claimBtn) {
     claimBtn.textContent = 'Retry';
     claimBtn.style.opacity = '1';
-    claimBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    claimBtn.style.background = '#ef4444';
     (claimBtn as HTMLButtonElement).disabled = false;
   }
   const content = toastElement.querySelector('div[style*="flex: 1"]');
   if (content) {
     content.innerHTML = `
-      <div style="font-weight: 600; color: #ef4444; margin-bottom: 2px;">Claim failed</div>
-      <div style="font-size: 12px; color: #aaa;">${error}</div>
+      <div style="font-weight: 600; font-size: 13px; color: #ef4444;">Failed</div>
+      <div style="font-size: 11px; color: #888;">${error}</div>
     `;
   }
 }
@@ -239,7 +216,6 @@ async function claimAllTokens(): Promise<void> {
       if (response?.success) {
         totalAmount += response.amount || 0;
       } else {
-        // Token might already be spent or invalid - not a hard error
         console.log('[Nutpay] Token claim failed:', response?.error);
       }
     } catch (error) {
@@ -249,11 +225,12 @@ async function claimAllTokens(): Promise<void> {
   }
 
   if (totalAmount > 0) {
+    pendingTokens = [];
     showClaimSuccess(totalAmount);
   } else if (anyFailed) {
     showClaimError('Communication error');
   } else {
-    showClaimError('Tokens already spent or invalid');
+    showClaimError('Already spent or invalid');
   }
 }
 
@@ -279,7 +256,6 @@ function observeDOMChanges(): void {
 
     if (newTokens.length > 0) {
       console.log(`[Nutpay] Found ${newTokens.length} new ecash token(s)`);
-      // If toast is already showing, update it; otherwise show new one
       pendingTokens.push(...newTokens);
       showClaimToast(pendingTokens);
     }
@@ -289,6 +265,11 @@ function observeDOMChanges(): void {
     childList: true,
     subtree: true,
   });
+}
+
+// Get the list of found tokens (for querying from popup)
+export function getFoundTokens(): Array<{ token: string }> {
+  return pendingTokens.map(({ token }) => ({ token }));
 }
 
 // Initialize scanner

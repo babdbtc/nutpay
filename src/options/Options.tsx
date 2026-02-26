@@ -571,6 +571,20 @@ function Options() {
             />
           </div>
 
+          <Separator className="bg-border" />
+
+          <div className="flex items-center justify-between py-2">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Show balance on icon</Label>
+              <p className="text-xs text-muted-foreground">
+                Display wallet balance on the extension icon badge
+              </p>
+            </div>
+            <Switch
+              checked={settings.showBadgeBalance}
+              onCheckedChange={(v) => updateSetting('showBadgeBalance', v)}
+            />
+          </div>
 
         </CardContent>
       </Card>

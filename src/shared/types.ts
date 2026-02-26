@@ -1,4 +1,4 @@
-import type { Proof } from '@cashu/cashu-ts';
+import type { Proof, NUT10Option } from '@cashu/cashu-ts';
 
 // NUT-24 / NUT-18 payment request (from 402 X-Cashu header)
 export interface XCashuPaymentRequest {
@@ -8,6 +8,7 @@ export interface XCashuPaymentRequest {
   id?: string;         // NUT-18 `i` field: payment id
   description?: string; // NUT-18 `d` field
   singleUse?: boolean; // NUT-18 `s` field
+  nut10?: NUT10Option; // NUT-10 locking condition (e.g. P2PK, HTLC)
 }
 
 // Message types for extension communication
@@ -72,9 +73,6 @@ export type MessageType =
   | 'REQUEST_LNURL_INVOICE'
   // Spending analytics
   | 'GET_SPENDING_BY_DOMAIN'
-  // Page ecash scanning
-  | 'ECASH_FOUND'
-  | 'CLAIM_ECASH'
   // Side panel
   | 'OPEN_SIDE_PANEL';
 
@@ -153,6 +151,7 @@ export interface Settings {
   displayFormat: 'symbol' | 'text'; // 'symbol' = ₿10, 'text' = 10 sats
   theme: ThemeId;
   enableAnimations: boolean;
+  showBadgeBalance: boolean;
 }
 
 // Mint configuration

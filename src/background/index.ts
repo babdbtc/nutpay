@@ -73,13 +73,7 @@ import { resolveLnurlPay, requestLnurlInvoice } from '../core/protocol/lnurl';
 import { storeSeed, hasSeed, getWalletVersion } from '../core/storage/seed-store';
 import { getCounters } from '../core/storage/counter-store';
 import type { SecurityConfig } from '../shared/types';
-import {
-  updateBadgeBalance,
-  flashPaymentSuccess,
-  flashPaymentPending,
-  flashPaymentFailed,
-  flashReceived,
-} from './badge-manager';
+import { updateBadgeBalance } from './badge-manager';
 import { setupContextMenus, handleContextMenuClick } from './context-menu';
 
 // Ensure a random encryption key is in session storage for no-security mode.
@@ -126,13 +120,10 @@ async function handleMessage(
 ): Promise<unknown> {
   switch (message.type) {
     case 'PAYMENT_REQUIRED': {
-      flashPaymentPending();
       const paymentResult = await handlePaymentRequired(message as PaymentRequiredMessage, tabId);
       if (paymentResult.type === 'PAYMENT_TOKEN') {
         // Balance changed - update badge after a short delay for the swap to finalize
         setTimeout(() => updateBadgeBalance(), 500);
-      } else if (paymentResult.type === 'PAYMENT_FAILED') {
-        flashPaymentFailed();
       }
       return paymentResult;
     }
@@ -164,8 +155,15 @@ async function handleMessage(
     case 'GET_SETTINGS':
       return getSettings();
 
-    case 'UPDATE_SETTINGS':
-      return updateSettings((message as ExtensionMessage & { settings: Parameters<typeof updateSettings>[0] }).settings);
+    case 'UPDATE_SETTINGS': {
+      const settingsMsg = message as ExtensionMessage & { settings: Parameters<typeof updateSettings>[0] };
+      const result = await updateSettings(settingsMsg.settings);
+      // Refresh badge if the badge setting was changed
+      if ('showBadgeBalance' in settingsMsg.settings) {
+        setTimeout(() => updateBadgeBalance(), 100);
+      }
+      return result;
+    }
 
     case 'GET_MINTS':
       return getMints();
@@ -217,7 +215,7 @@ async function handleMessage(
       const msg = message as ExtensionMessage & { mintUrl: string; amount: number; quoteId: string };
       const mintResult = await mintProofsFromQuote(msg.mintUrl, msg.amount, msg.quoteId);
       if ((mintResult as { success: boolean }).success) {
-        flashReceived(msg.amount);
+        setTimeout(() => updateBadgeBalance(), 500);
       }
       return mintResult;
     }
@@ -230,7 +228,7 @@ async function handleMessage(
       const msg = message as ExtensionMessage & { mintUrl: string; amount: number };
       const sendResult = await generateSendToken(msg.mintUrl, msg.amount);
       if ((sendResult as { success: boolean }).success) {
-        flashPaymentSuccess(msg.amount);
+        setTimeout(() => updateBadgeBalance(), 500);
       }
       return sendResult;
     }
@@ -250,7 +248,7 @@ async function handleMessage(
       };
       const meltResult = await payLightningInvoice(msg.mintUrl, msg.invoice, msg.quoteId, msg.amount, msg.feeReserve);
       if ((meltResult as { success: boolean }).success) {
-        flashPaymentSuccess(msg.amount);
+        setTimeout(() => updateBadgeBalance(), 500);
       }
       return meltResult;
     }
@@ -642,23 +640,6 @@ async function handleMessage(
     case 'CANCEL_RECOVERY': {
       cancelRecovery();
       return { success: true };
-    }
-
-    // Page ecash scanning
-    case 'ECASH_FOUND': {
-      const msg = message as ExtensionMessage & { count: number; origin: string };
-      console.log(`[Nutpay] Ecash found: ${msg.count} token(s) on ${msg.origin}`);
-      flashReceived(0); // Flash badge to alert user
-      return { acknowledged: true };
-    }
-
-    case 'CLAIM_ECASH': {
-      const msg = message as ExtensionMessage & { token: string };
-      const claimResult = await receiveToken(msg.token);
-      if ((claimResult as { success: boolean }).success) {
-        setTimeout(() => updateBadgeBalance(), 500);
-      }
-      return claimResult;
     }
 
     // Side panel
