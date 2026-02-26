@@ -5,7 +5,7 @@
 const MSG_TO_CONTENT = 'nutpay_to_content';
 const MSG_FROM_CONTENT = 'nutpay_from_content';
 
-import { initEcashScanner, getFoundTokens } from './ecash-scanner';
+import { initEcashScanner, getFoundTokens, handleTokensClaimed } from './ecash-scanner';
 
 // Inject the interceptor script into the page
 function injectScript(): void {
@@ -90,6 +90,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'GET_PAGE_ECASH') {
     const tokens = getFoundTokens();
     sendResponse({ tokens });
+    return;
+  }
+
+  // Tokens were claimed from the popup/sidepanel — dismiss the in-page toast
+  if (message.type === 'PAGE_TOKENS_CLAIMED') {
+    handleTokensClaimed();
     return;
   }
 

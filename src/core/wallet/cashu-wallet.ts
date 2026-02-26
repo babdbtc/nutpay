@@ -372,6 +372,17 @@ export async function receiveToken(encodedToken: string): Promise<{
   }
 }
 
+// Decode a Cashu token to get its amount without claiming it
+export function decodeTokenAmount(encodedToken: string): { amount: number; mint: string } | { error: string } {
+  try {
+    const decoded = getDecodedToken(encodedToken);
+    const amount = decoded.proofs.reduce((sum: number, p: Proof) => sum + p.amount, 0);
+    return { amount, mint: decoded.mint };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Failed to decode token' };
+  }
+}
+
 // Get wallet balances
 export async function getWalletBalances(): Promise<MintBalance[]> {
   const balanceMap = await getBalanceByMint();

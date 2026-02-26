@@ -9,6 +9,7 @@ import { handleApprovalResponse, handlePopupClosed, handleUnlockComplete, handle
 import {
   getWalletBalances,
   receiveToken,
+  decodeTokenAmount,
   createLightningReceiveInvoice,
   checkMintQuoteStatus,
   mintProofsFromQuote,
@@ -150,6 +151,11 @@ async function handleMessage(
         setTimeout(() => updateBadgeBalance(), 500);
       }
       return addResult;
+    }
+
+    case 'DECODE_TOKEN': {
+      const msg = message as ExtensionMessage & { token: string };
+      return decodeTokenAmount(msg.token);
     }
 
     case 'GET_SETTINGS':
@@ -639,6 +645,18 @@ async function handleMessage(
 
     case 'CANCEL_RECOVERY': {
       cancelRecovery();
+      return { success: true };
+    }
+
+    // Open popup (e.g. to prompt unlock for claiming tokens)
+    case 'OPEN_POPUP': {
+      try {
+        if (chrome.action?.openPopup) {
+          await chrome.action.openPopup();
+        }
+      } catch {
+        // openPopup may fail if popup is already open or API unavailable
+      }
       return { success: true };
     }
 
