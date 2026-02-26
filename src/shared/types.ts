@@ -71,7 +71,12 @@ export type MessageType =
   | 'RESOLVE_LNURL'
   | 'REQUEST_LNURL_INVOICE'
   // Spending analytics
-  | 'GET_SPENDING_BY_DOMAIN';
+  | 'GET_SPENDING_BY_DOMAIN'
+  // Page ecash scanning
+  | 'ECASH_FOUND'
+  | 'CLAIM_ECASH'
+  // Side panel
+  | 'OPEN_SIDE_PANEL';
 
 // Base message structure
 export interface BaseMessage {

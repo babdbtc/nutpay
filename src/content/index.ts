@@ -5,6 +5,8 @@
 const MSG_TO_CONTENT = 'nutpay_to_content';
 const MSG_FROM_CONTENT = 'nutpay_from_content';
 
+import { initEcashScanner } from './ecash-scanner';
+
 // Inject the interceptor script into the page
 function injectScript(): void {
   const script = document.createElement('script');
@@ -93,4 +95,5 @@ chrome.runtime.onMessage.addListener((message) => {
 console.log('[Nutpay] Content script initializing...');
 injectScript();
 listenFromInjected();
+initEcashScanner();
 console.log('[Nutpay] Content script loaded');

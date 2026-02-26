@@ -18,9 +18,19 @@ Nutpay is a full-featured [Cashu](https://cashu.space) wallet that runs as a Chr
 - **PIN / password lock** - Session timeout, lockout protection, credential recovery
 - **Proof state checks** - Periodic reconciliation against mints (NUT-07)
 
+## Browser-Native Features
+
+Nutpay takes advantage of being a browser extension to provide features a standalone wallet can't:
+
+- **Automatic 402 payments** - Transparent fetch interception for HTTP 402 + X-Cashu (NUT-24)
+- **Page ecash scanning** - Detects `cashuA`/`cashuB` tokens on web pages and shows a one-click claim notification
+- **Right-click context menu** - Select a Cashu token, Lightning invoice, or Lightning address on any page and act on it from the right-click menu
+- **Badge notifications** - Extension icon shows your sat balance, flashes on 402 detection, successful payments, and errors
+- **Side panel** - Open Nutpay as a persistent side panel that stays open while you browse, with auto-refresh and full wallet functionality
+
 ## Automatic 402 Payments
 
-On top of the wallet, Nutpay adds seamless web micropayments. When a website returns an HTTP 402 (Payment Required) response with an `X-Cashu` header, Nutpay detects it, prompts you for approval, pays, and retries the request — all transparently.
+When a website returns an HTTP 402 (Payment Required) response with an `X-Cashu` header, Nutpay detects it, prompts you for approval, pays, and retries the request — all transparently.
 
 - **One-click payments** - No forms, no accounts, just approve and pay
 - **True micropayments** - Pay 1 sat (fraction of a cent) with zero fees
@@ -93,6 +103,16 @@ Click the Nutpay icon to open the wallet popup:
 - **History** - Browse, filter, and review all past transactions
 - **Mint details** - Tap a mint to see info, proof counts, and denomination breakdown
 
+### Side Panel
+
+For a better experience, open Nutpay as a persistent side panel:
+
+1. Click the Nutpay icon to open the popup
+2. Click the **side panel icon** (top-right, next to lock/settings)
+3. The wallet opens as a side panel that stays open while you browse
+
+The side panel auto-refreshes your balance every 30 seconds and shows more transaction history than the popup. All wallet features (send, receive, Lightning) work identically.
+
 ### Automatic 402 Payments
 
 Once configured with funds, Nutpay handles web payments automatically:
@@ -104,6 +124,39 @@ Once configured with funds, Nutpay handles web payments automatically:
 5. The payment is sent and content loads automatically
 
 For trusted sites, check "Auto-approve future payments from this site" to skip the approval popup. You can configure per-payment and daily spending limits in Settings.
+
+### Page Ecash Scanning
+
+Nutpay automatically scans web pages for Cashu ecash tokens (`cashuA...` or `cashuB...` strings). When tokens are found:
+
+1. A toast notification appears at the bottom-right of the page
+2. Click **Claim** to receive all detected tokens into your wallet
+3. The toast shows success/failure status and auto-dismisses
+
+The scanner also watches for dynamically added content (e.g., new posts loading in a feed).
+
+### Right-Click Context Menu
+
+Select text on any web page containing a Cashu token, Lightning invoice, or Lightning address, then right-click to see Nutpay actions:
+
+- **Claim Cashu token with Nutpay** - Receive a selected `cashuA`/`cashuB` token
+- **Pay Lightning invoice with Nutpay** - Pay a selected `lnbc...` BOLT11 invoice
+- **Pay Lightning address with Nutpay** - Send to a selected `user@domain.com` address or `lnurl...`
+
+Progress and results are shown via Chrome notifications.
+
+### Badge Notifications
+
+The Nutpay extension icon shows real-time status:
+
+| Badge | Meaning |
+|-------|---------|
+| `1.2k` (purple) | Your wallet balance in sats |
+| `402` (orange) | Payment request detected |
+| `-100` (green) | Successful payment |
+| `+50` (green) | Received ecash or Lightning |
+| `✗` (red) | Payment failed |
+| `🔒` (gray) | Wallet is locked |
 
 ### Wallet Backup & Recovery
 
@@ -332,6 +385,11 @@ Users can add custom mints in the extension settings. During wallet recovery, th
 ## Technical Details
 
 - **Manifest V3** - Built for modern Chrome extension standards
+- **Side Panel API** - `chrome.sidePanel` for persistent wallet UI alongside browsing
+- **Context Menus API** - `chrome.contextMenus` for right-click actions on tokens, invoices, and addresses
+- **Notifications API** - `chrome.notifications` for payment progress and results
+- **Badge API** - `chrome.action.setBadgeText` for real-time balance and payment status on the icon
+- **DOM scanning** - Content script scans pages for ecash tokens using regex + MutationObserver for dynamic content
 - **Atomic proof lifecycle** - Proofs marked `PENDING_SPEND` before mint operations; recovered on service worker restart
 - **Encrypted storage** - Proofs and seed encrypted with AES-GCM-256
 - **Proof selection** - Optimizes for minimal change using subset-sum algorithm

@@ -73,6 +73,14 @@ import { resolveLnurlPay, requestLnurlInvoice } from '../core/protocol/lnurl';
 import { storeSeed, hasSeed, getWalletVersion } from '../core/storage/seed-store';
 import { getCounters } from '../core/storage/counter-store';
 import type { SecurityConfig } from '../shared/types';
+import {
+  updateBadgeBalance,
+  flashPaymentSuccess,
+  flashPaymentPending,
+  flashPaymentFailed,
+  flashReceived,
+} from './badge-manager';
+import { setupContextMenus, handleContextMenuClick } from './context-menu';
 
 // Ensure a random encryption key is in session storage for no-security mode.
 // This handles: fresh install, browser restart, security disabled.
@@ -117,8 +125,17 @@ async function handleMessage(
   tabId: number
 ): Promise<unknown> {
   switch (message.type) {
-    case 'PAYMENT_REQUIRED':
-      return handlePaymentRequired(message as PaymentRequiredMessage, tabId);
+    case 'PAYMENT_REQUIRED': {
+      flashPaymentPending();
+      const paymentResult = await handlePaymentRequired(message as PaymentRequiredMessage, tabId);
+      if (paymentResult.type === 'PAYMENT_TOKEN') {
+        // Balance changed - update badge after a short delay for the swap to finalize
+        setTimeout(() => updateBadgeBalance(), 500);
+      } else if (paymentResult.type === 'PAYMENT_FAILED') {
+        flashPaymentFailed();
+      }
+      return paymentResult;
+    }
 
     case 'APPROVAL_RESPONSE':
       handleApprovalResponse(message as ApprovalResponseMessage);
@@ -136,8 +153,13 @@ async function handleMessage(
     case 'GET_TRANSACTIONS':
       return getRecentTransactions((message as ExtensionMessage & { limit?: number }).limit || 10);
 
-    case 'ADD_PROOFS':
-      return receiveToken((message as ExtensionMessage & { token: string }).token);
+    case 'ADD_PROOFS': {
+      const addResult = await receiveToken((message as ExtensionMessage & { token: string }).token);
+      if ((addResult as { success: boolean }).success) {
+        setTimeout(() => updateBadgeBalance(), 500);
+      }
+      return addResult;
+    }
 
     case 'GET_SETTINGS':
       return getSettings();
@@ -193,7 +215,11 @@ async function handleMessage(
 
     case 'MINT_PROOFS': {
       const msg = message as ExtensionMessage & { mintUrl: string; amount: number; quoteId: string };
-      return mintProofsFromQuote(msg.mintUrl, msg.amount, msg.quoteId);
+      const mintResult = await mintProofsFromQuote(msg.mintUrl, msg.amount, msg.quoteId);
+      if ((mintResult as { success: boolean }).success) {
+        flashReceived(msg.amount);
+      }
+      return mintResult;
     }
 
     case 'GET_PENDING_QUOTES':
@@ -202,7 +228,11 @@ async function handleMessage(
     // Send
     case 'GENERATE_SEND_TOKEN': {
       const msg = message as ExtensionMessage & { mintUrl: string; amount: number };
-      return generateSendToken(msg.mintUrl, msg.amount);
+      const sendResult = await generateSendToken(msg.mintUrl, msg.amount);
+      if ((sendResult as { success: boolean }).success) {
+        flashPaymentSuccess(msg.amount);
+      }
+      return sendResult;
     }
 
     case 'GET_MELT_QUOTE': {
@@ -218,7 +248,11 @@ async function handleMessage(
         amount: number;
         feeReserve: number;
       };
-      return payLightningInvoice(msg.mintUrl, msg.invoice, msg.quoteId, msg.amount, msg.feeReserve);
+      const meltResult = await payLightningInvoice(msg.mintUrl, msg.invoice, msg.quoteId, msg.amount, msg.feeReserve);
+      if ((meltResult as { success: boolean }).success) {
+        flashPaymentSuccess(msg.amount);
+      }
+      return meltResult;
     }
 
     case 'GET_PENDING_TOKENS':
@@ -318,6 +352,8 @@ async function handleMessage(
       if (authResult.valid && authResult.key) {
         await setSessionKey(authResult.key);
         await extendSession();
+        // Wallet unlocked - update badge to show balance
+        setTimeout(() => updateBadgeBalance(), 300);
         return { success: true };
       } else {
         const isNowLocked = await recordFailedAttempt();
@@ -608,6 +644,34 @@ async function handleMessage(
       return { success: true };
     }
 
+    // Page ecash scanning
+    case 'ECASH_FOUND': {
+      const msg = message as ExtensionMessage & { count: number; origin: string };
+      console.log(`[Nutpay] Ecash found: ${msg.count} token(s) on ${msg.origin}`);
+      flashReceived(0); // Flash badge to alert user
+      return { acknowledged: true };
+    }
+
+    case 'CLAIM_ECASH': {
+      const msg = message as ExtensionMessage & { token: string };
+      const claimResult = await receiveToken(msg.token);
+      if ((claimResult as { success: boolean }).success) {
+        setTimeout(() => updateBadgeBalance(), 500);
+      }
+      return claimResult;
+    }
+
+    // Side panel
+    case 'OPEN_SIDE_PANEL': {
+      if (chrome.sidePanel) {
+        const msg = message as ExtensionMessage & { tabId?: number };
+        if (msg.tabId) {
+          await (chrome.sidePanel as unknown as { open: (opts: { tabId: number }) => Promise<void> }).open({ tabId: msg.tabId });
+        }
+      }
+      return { success: true };
+    }
+
     // Spending analytics
     case 'GET_SPENDING_BY_DOMAIN':
       return getSpendingByDomain();
@@ -677,6 +741,9 @@ chrome.windows.onRemoved.addListener((windowId) => {
   handleUnlockPopupClosed(windowId);
 });
 
+// Listen for context menu clicks
+chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
+
 // Periodic cleanup of old pending payments, quotes, and tokens
 setInterval(() => {
   cleanupOldPendingPayments();
@@ -723,6 +790,9 @@ import { reconcileProofStates, recoverPendingProofs } from '../core/wallet/proof
   } catch (error) {
     console.warn('[Nutpay] Startup: proof reconciliation failed:', error);
   }
+
+  // Update badge after startup reconciliation
+  updateBadgeBalance();
 })();
 
 // Also run periodically every 5 minutes (service worker may stay alive longer)
@@ -739,9 +809,20 @@ setInterval(async () => {
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('[Nutpay] Extension installed');
+    // Setup context menus on install
+    setupContextMenus();
+    // Enable side panel to open on action click (user can toggle)
+    if (chrome.sidePanel) {
+      chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+    }
   } else if (details.reason === 'update') {
     console.log('[Nutpay] Extension updated');
+    // Re-create context menus on update
+    setupContextMenus();
   }
 });
+
+// Update badge on startup
+updateBadgeBalance();
 
 console.log('[Nutpay] Background service worker started');

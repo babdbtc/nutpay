@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { MintBalance, Transaction, Settings, MintConfig } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount, formatTransactionAmount } from '../shared/format';
 import { applyTheme } from '../shared/theme';
-import { LightningReceive } from './components/LightningReceive';
-import { SendModal } from './components/SendModal';
-import { MintInfoModal } from './components/MintInfoModal';
-import { TransactionHistory } from './components/TransactionHistory';
-import { SecuritySetup } from './components/SecuritySetup';
-import { LockScreen } from './components/LockScreen';
-import { RecoveryScreen } from './components/RecoveryScreen';
-import { WelcomeScreen } from './components/WelcomeScreen';
+import { LightningReceive } from '../popup/components/LightningReceive';
+import { SendModal } from '../popup/components/SendModal';
+import { MintInfoModal } from '../popup/components/MintInfoModal';
+import { TransactionHistory } from '../popup/components/TransactionHistory';
+import { SecuritySetup } from '../popup/components/SecuritySetup';
+import { LockScreen } from '../popup/components/LockScreen';
+import { RecoveryScreen } from '../popup/components/RecoveryScreen';
+import { WelcomeScreen } from '../popup/components/WelcomeScreen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -18,12 +18,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock, PanelRightOpen } from 'lucide-react';
+import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock, RefreshCw } from 'lucide-react';
 
 type View = 'main' | 'history';
 type AuthState = 'checking' | 'welcome' | 'setup' | 'import' | 'locked' | 'recovery' | 'unlocked';
 
-function Popup() {
+function SidePanel() {
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [authType, setAuthType] = useState<'pin' | 'password'>('pin');
   const [view, setView] = useState<View>('main');
@@ -37,16 +37,10 @@ function Popup() {
   const [selectedMintInfo, setSelectedMintInfo] = useState<{ url: string; name: string } | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [receiving, setReceiving] = useState(false);
-  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
   const [securityEnabled, setSecurityEnabled] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // Check for pending payment from URL params (opened by 402 request when locked)
-    const params = new URLSearchParams(window.location.search);
-    const pendingPayment = params.get('pendingPayment');
-    if (pendingPayment) {
-      setPendingPaymentId(pendingPayment);
-    }
     checkAuth();
   }, []);
 
@@ -56,18 +50,14 @@ function Popup() {
 
       if (!result.securityEnabled) {
         setSecurityEnabled(false);
-        // No security setup - check if this is a fresh install
         const hasBalance = await chrome.runtime.sendMessage({ type: 'GET_BALANCE' });
         const walletInfo = await chrome.runtime.sendMessage({ type: 'GET_WALLET_INFO' });
 
         if (hasBalance && hasBalance.length > 0) {
-          // Has some balance but no security - prompt to setup
           setAuthState('setup');
         } else if (!walletInfo.hasSeed) {
-          // Fresh install with no seed - show welcome screen
           setAuthState('welcome');
         } else {
-          // Has seed but no security (edge case) - go to unlocked
           setAuthState('unlocked');
         }
       } else if (result.valid) {
@@ -81,7 +71,7 @@ function Popup() {
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      setAuthState('welcome'); // Show welcome on error for fresh installs
+      setAuthState('welcome');
     }
   };
 
@@ -91,41 +81,55 @@ function Popup() {
     }
   }, [authState]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [balanceData, txData, settingsData, mintsData] = await Promise.all([
         chrome.runtime.sendMessage({ type: 'GET_BALANCE' }),
-        chrome.runtime.sendMessage({ type: 'GET_TRANSACTIONS', limit: 5 }),
+        chrome.runtime.sendMessage({ type: 'GET_TRANSACTIONS', limit: 10 }),
         chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }),
         chrome.runtime.sendMessage({ type: 'GET_MINTS' }),
       ]);
       setBalances(balanceData || []);
       setTransactions(txData || []);
-      // Merge with defaults to ensure new settings fields have values
       const loadedSettings = { ...DEFAULT_SETTINGS, ...settingsData };
       setSettings(loadedSettings);
       setMints(mintsData || []);
-      // Apply theme
       applyTheme(loadedSettings.theme || 'classic');
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Auto-refresh data every 30 seconds in side panel (it stays open)
+  useEffect(() => {
+    if (authState !== 'unlocked') return;
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [authState, loadData]);
+
+  // Listen for balance-changing events from background
+  useEffect(() => {
+    const listener = (message: { type: string }) => {
+      if (message.type === 'MINT_QUOTE_PAID' || message.type === 'SETTINGS_UPDATED') {
+        loadData();
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [loadData]);
 
   const totalBalance = balances.reduce((sum, b) => sum + b.balance, 0);
 
   const handleReceive = async () => {
     if (!tokenInput.trim()) return;
-
     setReceiving(true);
     try {
       const result = await chrome.runtime.sendMessage({
         type: 'ADD_PROOFS',
         token: tokenInput.trim(),
       });
-
       if (result.success) {
         setShowReceive(false);
         setTokenInput('');
@@ -133,27 +137,21 @@ function Popup() {
       } else {
         alert(result.error || 'Failed to receive token');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to receive token');
     } finally {
       setReceiving(false);
     }
   };
 
-  const openOptions = () => {
-    chrome.runtime.openOptionsPage();
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setTimeout(() => setRefreshing(false), 500);
   };
 
-  const openSidePanel = async () => {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id && chrome.sidePanel) {
-        await (chrome.sidePanel as unknown as { open: (opts: { tabId: number }) => Promise<void> }).open({ tabId: tab.id });
-        window.close(); // Close the popup since side panel is now open
-      }
-    } catch (error) {
-      console.error('Failed to open side panel:', error);
-    }
+  const openOptions = () => {
+    chrome.runtime.openOptionsPage();
   };
 
   const handleLock = async () => {
@@ -165,7 +163,6 @@ function Popup() {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
@@ -174,45 +171,31 @@ function Popup() {
 
   const getOriginHost = (origin?: string) => {
     if (!origin) return 'Unknown';
-    try {
-      return new URL(origin).hostname;
-    } catch {
-      return origin;
-    }
+    try { return new URL(origin).hostname; } catch { return origin; }
   };
 
-  // Keyboard shortcuts for modals
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showReceive) {
-          e.preventDefault();
-          setShowReceive(false);
-          setTokenInput('');
-        } else if (showSend) {
-          e.preventDefault();
-          setShowSend(false);
-        } else if (selectedMintInfo) {
-          e.preventDefault();
-          setSelectedMintInfo(null);
-        }
+        if (showReceive) { e.preventDefault(); setShowReceive(false); setTokenInput(''); }
+        else if (showSend) { e.preventDefault(); setShowSend(false); }
+        else if (selectedMintInfo) { e.preventDefault(); setSelectedMintInfo(null); }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showReceive, showSend, selectedMintInfo]);
 
-  // Auth checking state
+  // Auth states
   if (authState === 'checking') {
     return (
-      <div className="popup-container flex items-center justify-center bg-background">
+      <div className="sidepanel-container flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  // Welcome screen for fresh installs
   if (authState === 'welcome') {
     return (
       <WelcomeScreen
@@ -222,10 +205,9 @@ function Popup() {
     );
   }
 
-  // Security setup screen
   if (authState === 'setup') {
     return (
-      <div className="popup-container bg-background">
+      <div className="sidepanel-container bg-background">
         <SecuritySetup
           onComplete={() => setAuthState('unlocked')}
           onSkip={() => setAuthState('unlocked')}
@@ -234,7 +216,6 @@ function Popup() {
     );
   }
 
-  // Import wallet screen
   if (authState === 'import') {
     return (
       <RecoveryScreen
@@ -244,31 +225,16 @@ function Popup() {
     );
   }
 
-  // Lock screen
   if (authState === 'locked') {
-    const handleUnlock = async () => {
-      // If this popup was opened for a pending payment, notify background and close
-      if (pendingPaymentId) {
-        await chrome.runtime.sendMessage({
-          type: 'UNLOCK_COMPLETE',
-          requestId: pendingPaymentId,
-        });
-        window.close();
-        return;
-      }
-      setAuthState('unlocked');
-    };
-
     return (
       <LockScreen
         authType={authType}
-        onUnlock={handleUnlock}
+        onUnlock={() => setAuthState('unlocked')}
         onForgot={() => setAuthState('recovery')}
       />
     );
   }
 
-  // Recovery screen
   if (authState === 'recovery') {
     return (
       <RecoveryScreen
@@ -278,19 +244,17 @@ function Popup() {
     );
   }
 
-  // Main app loading state
   if (loading) {
     return (
-      <div className="popup-container flex items-center justify-center bg-background">
+      <div className="sidepanel-container flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  // Transaction History view
   if (view === 'history') {
     return (
-      <div className="popup-container bg-background p-4">
+      <div className="sidepanel-container bg-background p-4">
         <TransactionHistory
           displayFormat={settings.displayFormat}
           onBack={() => setView('main')}
@@ -300,13 +264,18 @@ function Popup() {
   }
 
   return (
-    <div className="popup-container bg-background p-4 flex flex-col gap-3">
+    <div className="sidepanel-container bg-background p-4 flex flex-col gap-3">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-primary">Nutpay</h1>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={openSidePanel} className="text-muted-foreground hover:text-foreground" title="Open in side panel">
-            <PanelRightOpen className="h-5 w-5" />
+          <Button
+            variant="ghost" size="icon"
+            onClick={handleRefresh}
+            className="text-muted-foreground hover:text-foreground"
+            title="Refresh"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
           {securityEnabled && (
             <Button variant="ghost" size="icon" onClick={handleLock} className="text-muted-foreground hover:text-foreground" title="Lock wallet">
@@ -321,7 +290,7 @@ function Popup() {
 
       {/* Balance Card */}
       <Card className="bg-card border-0">
-        <CardContent className="py-4 px-6 text-center">
+        <CardContent className="py-5 px-6 text-center">
           <p className="text-xs text-muted-foreground mb-1">Total Balance</p>
           <p className="text-3xl font-bold text-white">
             {formatAmount(totalBalance, settings.displayFormat)}
@@ -331,16 +300,13 @@ function Popup() {
 
       {/* Action Buttons */}
       <div className="flex gap-3">
-        <Button
-          className="flex-1 bg-green-500 hover:bg-green-600"
-          onClick={() => setShowReceive(true)}
-        >
+        <Button className="flex-1 bg-green-500 hover:bg-green-600" onClick={() => setShowReceive(true)}>
           <ArrowDownLeft className="mr-2 h-4 w-4" />
           Receive
         </Button>
         <Button
           className="flex-1"
-          variant={totalBalance > 0 ? "default" : "secondary"}
+          variant={totalBalance > 0 ? 'default' : 'secondary'}
           onClick={() => setShowSend(true)}
           disabled={totalBalance === 0}
         >
@@ -379,7 +345,7 @@ function Popup() {
           <p className="text-center text-muted-foreground py-4 text-sm">No transactions yet</p>
         ) : (
           <>
-            <ScrollArea className="flex-1 min-h-[120px]">
+            <ScrollArea className="flex-1">
               <div className="flex flex-col gap-1.5">
                 {transactions.map((tx) => (
                   <Card key={tx.id} className="bg-card border-0">
@@ -402,7 +368,7 @@ function Popup() {
               className="w-full text-center py-1.5 text-primary text-sm hover:underline"
               onClick={() => setView('history')}
             >
-              View All Transactions →
+              View All Transactions
             </button>
           </>
         )}
@@ -428,17 +394,11 @@ function Popup() {
               />
               <div className="flex gap-3 mt-4">
                 <Button
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => {
-                    setShowReceive(false);
-                    setTokenInput('');
-                  }}
+                  variant="secondary" className="flex-1"
+                  onClick={() => { setShowReceive(false); setTokenInput(''); }}
                 >
                   Cancel
-                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
-                    Esc
-                  </Badge>
+                  <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">Esc</Badge>
                 </Button>
                 <Button
                   className="flex-1 bg-green-500 hover:bg-green-600"
@@ -453,10 +413,7 @@ function Popup() {
               <LightningReceive
                 mints={mints}
                 displayFormat={settings.displayFormat}
-                onSuccess={() => {
-                  setShowReceive(false);
-                  loadData();
-                }}
+                onSuccess={() => { setShowReceive(false); loadData(); }}
                 onClose={() => setShowReceive(false)}
               />
             </TabsContent>
@@ -474,10 +431,7 @@ function Popup() {
             mints={mints}
             balances={new Map(balances.map((b) => [b.mintUrl, b.balance]))}
             displayFormat={settings.displayFormat}
-            onSuccess={() => {
-              setShowSend(false);
-              loadData();
-            }}
+            onSuccess={() => { setShowSend(false); loadData(); }}
             onClose={() => setShowSend(false)}
           />
         </DialogContent>
@@ -503,4 +457,4 @@ function Popup() {
   );
 }
 
-export default Popup;
+export default SidePanel;

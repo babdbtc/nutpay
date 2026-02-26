@@ -12,7 +12,10 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "contextMenus",
+    "notifications",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -44,5 +47,8 @@
       "128": "assets/icons/icon-128.png"
     }
   },
-  "options_page": "options.html"
+  "options_page": "options.html",
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
 }
