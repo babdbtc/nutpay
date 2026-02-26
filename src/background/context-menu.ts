@@ -1,7 +1,7 @@
 // Context menu - right-click actions for cashu tokens, lightning invoices, and lightning addresses
 
 import { receiveToken, getMeltQuote, payLightningInvoice } from '../core/wallet/cashu-wallet';
-import { flashReceived, flashPaymentFailed, updateBadgeBalance } from './badge-manager';
+import { updateBadgeBalance } from './badge-manager';
 import { getMints } from '../core/storage/settings-store';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { resolveLnurlPay, requestLnurlInvoice } from '../core/protocol/lnurl';
@@ -131,12 +131,10 @@ async function handleClaimToken(token: string): Promise<void> {
         `Received ${amount} sats into your wallet.`,
         'success'
       );
-      if (amount > 0) flashReceived(amount);
-      else updateBadgeBalance();
+      updateBadgeBalance();
     } else {
       const error = (result as { error?: string }).error || 'Failed to claim token';
       showNotification('Claim failed', error, 'error');
-      flashPaymentFailed();
     }
   } catch (error) {
     showNotification(
@@ -144,7 +142,6 @@ async function handleClaimToken(token: string): Promise<void> {
       error instanceof Error ? error.message : 'Unknown error',
       'error'
     );
-    flashPaymentFailed();
   }
 }
 
@@ -206,7 +203,6 @@ async function handlePayInvoice(invoice: string): Promise<void> {
     } else {
       const error = (result as { error?: string }).error || 'Payment failed';
       showNotification('Payment failed', error, 'error');
-      flashPaymentFailed();
     }
   } catch (error) {
     showNotification(
@@ -214,7 +210,6 @@ async function handlePayInvoice(invoice: string): Promise<void> {
       error instanceof Error ? error.message : 'Unknown error',
       'error'
     );
-    flashPaymentFailed();
   }
 }
 
@@ -264,7 +259,6 @@ async function handlePayAddress(
       error instanceof Error ? error.message : 'Unknown error',
       'error'
     );
-    flashPaymentFailed();
   }
 }
 

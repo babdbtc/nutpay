@@ -37,6 +37,12 @@ export async function openApprovalPopup(
     balance: currentBalance.toString(),
   });
 
+  // Include NUT-10 locking info if present
+  if (paymentRequest.nut10) {
+    params.set('nut10Kind', paymentRequest.nut10.kind);
+    params.set('nut10Data', paymentRequest.nut10.data);
+  }
+
   const popup = await chrome.windows.create({
     url: `approval.html?${params.toString()}`,
     type: 'popup',

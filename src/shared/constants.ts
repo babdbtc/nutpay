@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   displayFormat: 'symbol', // Default to ₿ symbol
   theme: 'classic',
   enableAnimations: true,
+  showBadgeBalance: true,
 };
 
 // Theme definitions

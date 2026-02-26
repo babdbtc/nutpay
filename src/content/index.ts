@@ -5,7 +5,7 @@
 const MSG_TO_CONTENT = 'nutpay_to_content';
 const MSG_FROM_CONTENT = 'nutpay_from_content';
 
-import { initEcashScanner } from './ecash-scanner';
+import { initEcashScanner, getFoundTokens } from './ecash-scanner';
 
 // Inject the interceptor script into the page
 function injectScript(): void {
@@ -84,10 +84,17 @@ function listenFromInjected(): void {
   });
 }
 
-// Listen for messages from background (for push notifications)
-chrome.runtime.onMessage.addListener((message) => {
+// Listen for messages from background/popup
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // Query for ecash tokens found on this page
+  if (message.type === 'GET_PAGE_ECASH') {
+    const tokens = getFoundTokens();
+    sendResponse({ tokens });
+    return;
+  }
+
+  // Forward other messages to injected script
   console.log('[Nutpay] Received from background:', message);
-  // Forward to injected script
   postToInjected(message);
 });
 

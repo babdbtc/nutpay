@@ -39,6 +39,8 @@ interface PaymentDetails {
   amount: number;
   unit: string;
   balance: number;
+  nut10Kind?: string;  // NUT-10 locking condition kind (e.g. "P2PK", "HTLC")
+  nut10Data?: string;  // NUT-10 locking condition data (e.g. pubkey, hash)
 }
 
 function Approval() {
@@ -61,6 +63,8 @@ function Approval() {
       amount: parseInt(params.get('amount') || '0', 10),
       unit: params.get('unit') || 'sat',
       balance: parseInt(params.get('balance') || '0', 10),
+      nut10Kind: params.get('nut10Kind') || undefined,
+      nut10Data: params.get('nut10Data') || undefined,
     });
 
     chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }).then((data) => {
@@ -207,6 +211,14 @@ function Approval() {
                 {mintDisplay}
               </span>
             </div>
+            {details.nut10Kind && (
+              <div className="flex justify-between items-center py-2 border-t border-[#333]">
+                <span className="text-sm text-muted-foreground">Lock</span>
+                <span className="text-sm font-medium truncate max-w-[200px]" title={details.nut10Data || ''}>
+                  {details.nut10Kind === 'P2PK' ? 'P2PK (NUT-11)' : details.nut10Kind === 'HTLC' ? 'HTLC (NUT-14)' : details.nut10Kind}
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
