@@ -16,8 +16,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock, Check, X } from 'lucide-react';
 import type { AuthState } from '../../hooks/useWalletAuth';
+import type { PageToken } from '../../hooks/usePageEcash';
 
 type View = 'main' | 'history';
 
@@ -41,10 +42,11 @@ export interface WalletViewProps {
   loadData: () => Promise<void>;
 
   // Page ecash (optional)
-  pageTokens?: Array<{ token: string }>;
+  pageTokens?: PageToken[];
   claimingPage?: boolean;
   claimResult?: { success: boolean; amount?: number; error?: string } | null;
   claimPageTokens?: () => Promise<void>;
+  claimSingleToken?: (index: number) => Promise<void>;
 
   // Layout
   /** CSS class name for the container (e.g. 'popup-container' or 'sidepanel-container') */
@@ -71,6 +73,7 @@ export function WalletView({
   claimingPage = false,
   claimResult,
   claimPageTokens,
+  claimSingleToken,
   containerClass,
   headerActions,
 }: WalletViewProps) {
@@ -224,18 +227,66 @@ export function WalletView({
 
       {/* Page Ecash Banner */}
       {pageTokens.length > 0 && claimPageTokens && (
-        <div className="flex items-center justify-between bg-card rounded-lg px-3 py-2 border border-primary/20">
-          <span className="text-xs text-muted-foreground">
-            {pageTokens.length} ecash token{pageTokens.length > 1 ? 's' : ''} on this page
-          </span>
-          <Button
-            size="sm"
-            className="h-6 text-xs px-3"
-            onClick={claimPageTokens}
-            disabled={claimingPage}
-          >
-            {claimingPage ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Claim'}
-          </Button>
+        <div className="bg-card rounded-lg px-3 py-2 border border-primary/20">
+          {/* Header with token count and Claim All button */}
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-muted-foreground">
+              {pageTokens.length} ecash token{pageTokens.length > 1 ? 's' : ''} on this page
+            </span>
+            {pageTokens.filter(t => t.status === 'pending').length > 1 && (
+              <Button
+                size="sm"
+                className="h-6 text-xs px-3"
+                onClick={claimPageTokens}
+                disabled={claimingPage}
+              >
+                {claimingPage ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Claim All'}
+              </Button>
+            )}
+          </div>
+
+          {/* Individual token list */}
+          <div className="flex flex-col gap-1">
+            {pageTokens.map((pt, i) => (
+              <div key={i} className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {pt.status === 'claimed' && <Check className="h-3 w-3 text-green-400 flex-shrink-0" />}
+                  {pt.status === 'invalid' && <X className="h-3 w-3 text-red-400 flex-shrink-0" />}
+                  <span className={`text-xs font-medium ${
+                    pt.status === 'claimed' ? 'text-green-400' :
+                    pt.status === 'invalid' ? 'text-red-400' :
+                    'text-white'
+                  }`}>
+                    {pt.status === 'claimed'
+                      ? `Claimed ${formatAmount(pt.claimedAmount || 0, settings.displayFormat)}`
+                      : pt.status === 'invalid'
+                        ? 'Invalid or spent'
+                        : pt.amount !== null
+                          ? formatAmount(pt.amount, settings.displayFormat)
+                          : 'unknown amount'}
+                  </span>
+                  {pt.status === 'pending' && (
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {pt.token.slice(0, 8)}...{pt.token.slice(-4)}
+                    </span>
+                  )}
+                </div>
+                {pt.status === 'pending' && claimSingleToken && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-5 text-[10px] px-2 ml-2 flex-shrink-0"
+                    onClick={() => claimSingleToken(i)}
+                  >
+                    Claim
+                  </Button>
+                )}
+                {pt.status === 'claiming' && (
+                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-2 flex-shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

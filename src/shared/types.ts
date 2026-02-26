@@ -74,7 +74,13 @@ export type MessageType =
   // Spending analytics
   | 'GET_SPENDING_BY_DOMAIN'
   // Side panel
-  | 'OPEN_SIDE_PANEL';
+  | 'OPEN_SIDE_PANEL'
+  // Token decoding
+  | 'DECODE_TOKEN'
+  // Open popup (e.g. to unlock for claiming)
+  | 'OPEN_POPUP'
+  // Cross-sync: notify the other UI that tokens were claimed
+  | 'PAGE_TOKENS_CLAIMED';
 
 // Base message structure
 export interface BaseMessage {

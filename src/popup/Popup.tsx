@@ -60,6 +60,7 @@ function Popup() {
       claimingPage={ecash.claimingPage}
       claimResult={ecash.claimResult}
       claimPageTokens={ecash.claimPageTokens}
+      claimSingleToken={ecash.claimSingleToken}
       containerClass="popup-container"
       headerActions={
         <Button
