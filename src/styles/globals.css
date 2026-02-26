@@ -243,6 +243,12 @@
   max-height: 580px;
 }
 
+/* Side panel dimensions - fills the panel area */
+.sidepanel-container {
+  width: 100%;
+  min-height: 100vh;
+}
+
 /* Options page */
 .options-container {
   max-width: 800px;

@@ -36,6 +36,7 @@ function fixExtensionStructure() {
         ['dist/src/popup/index.html', 'dist/popup.html'],
         ['dist/src/approval/index.html', 'dist/approval.html'],
         ['dist/src/options/index.html', 'dist/options.html'],
+        ['dist/src/sidepanel/index.html', 'dist/sidepanel.html'],
       ];
 
       for (const [from, to] of htmlMoves) {
@@ -77,6 +78,7 @@ export default defineConfig({
         popup: resolve(__dirname, 'src/popup/index.html'),
         approval: resolve(__dirname, 'src/approval/index.html'),
         options: resolve(__dirname, 'src/options/index.html'),
+        sidepanel: resolve(__dirname, 'src/sidepanel/index.html'),
       },
       output: {
         banner: (chunk) => {
@@ -98,7 +100,7 @@ export default defineConfig({
         // Make content and inject scripts self-contained (no imports)
         manualChunks(id) {
           // Don't split content or inject scripts - they need to be self-contained
-          if (id.includes('content/index.ts') || id.includes('content/inject.ts')) {
+          if (id.includes('content/index.ts') || id.includes('content/inject.ts') || id.includes('content/ecash-scanner.ts')) {
             return undefined;
           }
           // Put shared dependencies in a client chunk for React pages
