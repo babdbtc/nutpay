@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { applyTheme } from '../shared/theme';
 
 export type AuthState = 'checking' | 'welcome' | 'setup' | 'import' | 'locked' | 'recovery' | 'unlocked';
 
@@ -21,6 +22,14 @@ export function useWalletAuth(): UseWalletAuthReturn {
 
   const checkAuth = async () => {
     try {
+      // Apply theme early so lock screen and other pre-auth screens match the theme
+      try {
+        const settings = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+        applyTheme(settings?.theme || 'midnight');
+      } catch {
+        applyTheme('midnight');
+      }
+
       const result = await chrome.runtime.sendMessage({ type: 'CHECK_SESSION' });
 
       if (!result.securityEnabled) {

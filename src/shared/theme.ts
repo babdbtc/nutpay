@@ -13,7 +13,7 @@ export function applyTheme(themeId: ThemeId): void {
  * Get current theme from document
  */
 export function getCurrentTheme(): ThemeId {
-  return (document.documentElement.getAttribute('data-theme') as ThemeId) || 'classic';
+  return (document.documentElement.getAttribute('data-theme') as ThemeId) || 'midnight';
 }
 
 /**
@@ -25,9 +25,9 @@ export async function loadAndApplyTheme(): Promise<void> {
     if (result?.theme) {
       applyTheme(result.theme);
     } else {
-      applyTheme('classic');
+      applyTheme('midnight');
     }
   } catch {
-    applyTheme('classic');
+    applyTheme('midnight');
   }
 }

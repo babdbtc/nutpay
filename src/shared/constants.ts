@@ -26,8 +26,9 @@ export const PRESET_MINTS: MintConfig[] = [
 export const DEFAULT_SETTINGS: Settings = {
   alwaysAsk: true,
   autoDiscoverMints: true,
+  autoClaimTokens: false,
   displayFormat: 'symbol', // Default to ₿ symbol
-  theme: 'classic',
+  theme: 'midnight',
   enableAnimations: true,
   showBadgeBalance: true,
 };

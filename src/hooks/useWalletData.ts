@@ -46,7 +46,7 @@ export function useWalletData(options: UseWalletDataOptions): UseWalletDataRetur
       const loadedSettings = { ...DEFAULT_SETTINGS, ...settingsData };
       setSettings(loadedSettings);
       setMints(mintsData || []);
-      applyTheme(loadedSettings.theme || 'classic');
+      applyTheme(loadedSettings.theme || 'midnight');
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {

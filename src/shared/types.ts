@@ -148,6 +148,7 @@ export type ThemeId = 'classic' | 'violet' | 'midnight' | 'ocean' | 'forest' | '
 export interface Settings {
   alwaysAsk: boolean;
   autoDiscoverMints: boolean;
+  autoClaimTokens: boolean;
   displayFormat: 'symbol' | 'text'; // 'symbol' = ₿10, 'text' = 10 sats
   theme: ThemeId;
   enableAnimations: boolean;

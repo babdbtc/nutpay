@@ -11,6 +11,36 @@ const foundTokens = new Set<string>();
 let toastElement: HTMLElement | null = null;
 let pendingTokens: Array<{ token: string; element: Element | null }> = [];
 
+// Theme color map - matches the preview colors from each theme definition
+const THEME_COLORS: Record<string, { bg: string; card: string; accent: string }> = {
+  classic:  { bg: '#16162a', card: '#252542', accent: '#f97316' },
+  violet:   { bg: '#16162a', card: '#252542', accent: '#a855f7' },
+  midnight: { bg: '#000000', card: '#111111', accent: '#ffffff' },
+  ocean:    { bg: '#0a1929', card: '#132f4c', accent: '#5090d3' },
+  forest:   { bg: '#0d1f0d', card: '#1a331a', accent: '#4ade80' },
+  bitcoin:  { bg: '#1a1307', card: '#2d2210', accent: '#f7931a' },
+};
+
+// Current theme colors (default to midnight)
+let currentColors = THEME_COLORS['midnight'];
+
+// Whether to auto-claim found tokens
+let autoClaimEnabled = false;
+
+// Fetch the current settings (theme + auto-claim)
+async function loadSettings(): Promise<void> {
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+    const themeId = result?.theme || 'midnight';
+    if (THEME_COLORS[themeId]) {
+      currentColors = THEME_COLORS[themeId];
+    }
+    autoClaimEnabled = result?.autoClaimTokens === true;
+  } catch {
+    // Use defaults if settings can't be loaded
+  }
+}
+
 // Scan a DOM node for cashu tokens
 function scanNode(node: Node): Array<{ token: string; element: Element | null }> {
   const results: Array<{ token: string; element: Element | null }> = [];
@@ -41,18 +71,8 @@ function scanNode(node: Node): Array<{ token: string; element: Element | null }>
   return results;
 }
 
-// Create and show the claim toast notification
-function showClaimToast(tokens: Array<{ token: string; element: Element | null }>): void {
-  // Remove existing toast
-  if (toastElement) {
-    toastElement.remove();
-    toastElement = null;
-  }
-
-  pendingTokens = tokens;
-  const count = tokens.length;
-
-  // Add animation keyframes once
+// Ensure toast animation styles are injected once
+function ensureToastStyles(): void {
   if (!document.getElementById('nutpay-toast-styles')) {
     const style = document.createElement('style');
     style.id = 'nutpay-toast-styles';
@@ -68,6 +88,24 @@ function showClaimToast(tokens: Array<{ token: string; element: Element | null }
     `;
     document.head.appendChild(style);
   }
+}
+
+// Create and show the claim toast notification (manual flow)
+function showClaimToast(tokens: Array<{ token: string; element: Element | null }>): void {
+  // Remove existing toast
+  if (toastElement) {
+    toastElement.remove();
+    toastElement = null;
+  }
+
+  pendingTokens = tokens;
+  const count = tokens.length;
+
+  ensureToastStyles();
+
+  const { card, accent } = currentColors;
+  // Determine button text color: use dark text on light accents, white on dark accents
+  const btnTextColor = accent === '#ffffff' || accent === '#4ade80' ? '#000000' : '#ffffff';
 
   const toast = document.createElement('div');
   toast.id = 'nutpay-ecash-toast';
@@ -76,7 +114,7 @@ function showClaimToast(tokens: Array<{ token: string; element: Element | null }
     top: 16px;
     right: 16px;
     z-index: 2147483647;
-    background: #1c1c2e;
+    background: ${card};
     color: #fff;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
@@ -98,8 +136,8 @@ function showClaimToast(tokens: Array<{ token: string; element: Element | null }
     </div>
     <button id="nutpay-claim-btn" style="
       flex-shrink: 0;
-      background: #f97316;
-      color: white;
+      background: ${accent};
+      color: ${btnTextColor};
       border: none;
       border-radius: 6px;
       padding: 6px 12px;
@@ -199,7 +237,7 @@ function showClaimError(error: string): void {
   }
 }
 
-// Claim all found tokens via the background service worker
+// Claim all found tokens via the background service worker (manual flow)
 async function claimAllTokens(): Promise<void> {
   showClaimingState();
 
@@ -234,12 +272,111 @@ async function claimAllTokens(): Promise<void> {
   }
 }
 
+// Auto-claim tokens silently, only show toast on success
+async function autoClaimTokens(tokens: Array<{ token: string; element: Element | null }>): Promise<void> {
+  let totalAmount = 0;
+
+  for (const { token } of tokens) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'ADD_PROOFS',
+        token,
+      });
+
+      if (response?.success) {
+        totalAmount += response.amount || 0;
+      } else {
+        console.log('[Nutpay] Auto-claim failed:', response?.error);
+      }
+    } catch (error) {
+      console.error('[Nutpay] Auto-claim error:', error);
+    }
+  }
+
+  if (totalAmount > 0) {
+    pendingTokens = [];
+    showAutoClaimSuccessToast(totalAmount);
+  }
+  // Silently ignore failures — token was likely already spent or invalid
+}
+
+// Show a minimal success toast for auto-claimed tokens (no buttons)
+function showAutoClaimSuccessToast(amount: number): void {
+  if (toastElement) {
+    toastElement.remove();
+    toastElement = null;
+  }
+
+  ensureToastStyles();
+
+  const { card } = currentColors;
+
+  const toast = document.createElement('div');
+  toast.id = 'nutpay-ecash-toast';
+  toast.setAttribute('style', `
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 2147483647;
+    background: ${card};
+    color: #fff;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 320px;
+    animation: nutpay-slide-in 0.25s ease-out;
+  `);
+
+  toast.innerHTML = `
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-weight: 600; font-size: 13px; color: #22c55e;">Claimed ${amount} sats</div>
+    </div>
+    <button id="nutpay-dismiss-btn" style="
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      padding: 2px;
+      font-size: 16px;
+      line-height: 1;
+    ">&times;</button>
+  `;
+
+  document.body.appendChild(toast);
+  toastElement = toast;
+
+  const dismissBtn = document.getElementById('nutpay-dismiss-btn');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => dismissToast());
+  }
+
+  setTimeout(() => {
+    if (toastElement === toast) dismissToast();
+  }, 5000);
+}
+
+// Handle found tokens — auto-claim or show manual toast
+function handleFoundTokens(tokens: Array<{ token: string; element: Element | null }>): void {
+  if (autoClaimEnabled) {
+    autoClaimTokens(tokens);
+  } else {
+    showClaimToast(tokens);
+  }
+}
+
 // Run initial scan after DOM is loaded
 function runInitialScan(): void {
   const tokens = scanNode(document.body);
   if (tokens.length > 0) {
     console.log(`[Nutpay] Found ${tokens.length} ecash token(s) on page`);
-    showClaimToast(tokens);
+    handleFoundTokens(tokens);
   }
 }
 
@@ -257,7 +394,7 @@ function observeDOMChanges(): void {
     if (newTokens.length > 0) {
       console.log(`[Nutpay] Found ${newTokens.length} new ecash token(s)`);
       pendingTokens.push(...newTokens);
-      showClaimToast(pendingTokens);
+      handleFoundTokens(pendingTokens);
     }
   });
 
@@ -273,7 +410,10 @@ export function getFoundTokens(): Array<{ token: string }> {
 }
 
 // Initialize scanner
-export function initEcashScanner(): void {
+export async function initEcashScanner(): Promise<void> {
+  // Load settings (theme colors + auto-claim preference) before showing any toasts
+  await loadSettings();
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       runInitialScan();
