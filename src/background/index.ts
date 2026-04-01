@@ -18,6 +18,7 @@ import {
   payLightningInvoice,
   subscribeMintQuote,
   unsubscribeMintQuote,
+  recoverStuckPendingProofs,
 } from '../core/wallet/cashu-wallet';
 import { getRecentTransactions, getFilteredTransactions, getSpendingByDomain } from '../core/storage/transaction-store';
 import { getSettings, updateSettings, getMints, addMint, updateMint, removeMint } from '../core/storage/settings-store';
@@ -790,7 +791,15 @@ import { reconcileProofStates, recoverPendingProofs } from '../core/wallet/proof
     console.warn('[Nutpay] Startup: proof reconciliation failed:', error);
   }
 
-  // Update badge after startup reconciliation
+  try {
+    const { recovered, removed } = await recoverStuckPendingProofs();
+    if (recovered > 0 || removed > 0) {
+      console.log(`[Nutpay] Startup: recovered ${recovered}, removed ${removed} stuck proofs`);
+    }
+  } catch (error) {
+    console.warn('[Nutpay] Startup: stuck proof recovery failed:', error);
+  }
+
   updateBadgeBalance();
 })();
 
