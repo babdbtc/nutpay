@@ -130,66 +130,74 @@ export function decodeLnurl(lnurl: string): string {
  * Validates the response according to LUD-06.
  */
 export async function fetchLnurlPayParams(url: string, domain: string): Promise<LnurlPayParams> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`LNURL service returned ${response.status}`);
-  }
-
-  const data = await response.json();
-
-  // Check for error response
-  if (data.status === 'ERROR') {
-    throw new Error(data.reason || 'LNURL service returned an error');
-  }
-
-  // Validate required fields (LUD-06)
-  if (data.tag !== 'payRequest') {
-    throw new Error(`Unexpected LNURL tag: ${data.tag || 'missing'}`);
-  }
-
-  if (typeof data.callback !== 'string') {
-    throw new Error('LNURL response missing callback URL');
-  }
-
-  if (typeof data.minSendable !== 'number' || typeof data.maxSendable !== 'number') {
-    throw new Error('LNURL response missing min/maxSendable');
-  }
-
-  if (data.minSendable > data.maxSendable) {
-    throw new Error('Invalid LNURL: minSendable > maxSendable');
-  }
-
-  // Parse metadata for description
-  let description = '';
-  let image: string | undefined;
-
-  if (typeof data.metadata === 'string') {
-    try {
-      const entries: [string, string][] = JSON.parse(data.metadata);
-      const textEntry = entries.find(([mime]) => mime === 'text/plain');
-      if (textEntry) description = textEntry[1];
-
-      const imageEntry = entries.find(([mime]) =>
-        mime.startsWith('image/png') || mime.startsWith('image/jpeg')
-      );
-      if (imageEntry) {
-        image = `data:${imageEntry[0]};base64,${imageEntry[1]}`;
-      }
-    } catch {
-      // Metadata parsing failed — not critical
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`LNURL service returned ${response.status}`);
     }
-  }
 
-  return {
-    callback: data.callback,
-    minSendable: data.minSendable,
-    maxSendable: data.maxSendable,
-    metadata: data.metadata || '',
-    description,
-    image,
-    domain,
-    commentAllowed: typeof data.commentAllowed === 'number' ? data.commentAllowed : undefined,
-  };
+    const data = await response.json();
+
+    if (data.status === 'ERROR') {
+      throw new Error(data.reason || 'LNURL service returned an error');
+    }
+
+    if (data.tag !== 'payRequest') {
+      throw new Error(`Unexpected LNURL tag: ${data.tag || 'missing'}`);
+    }
+
+    if (typeof data.callback !== 'string') {
+      throw new Error('LNURL response missing callback URL');
+    }
+
+    if (typeof data.minSendable !== 'number' || typeof data.maxSendable !== 'number') {
+      throw new Error('LNURL response missing min/maxSendable');
+    }
+
+    if (data.minSendable > data.maxSendable) {
+      throw new Error('Invalid LNURL: minSendable > maxSendable');
+    }
+
+    let description = '';
+    let image: string | undefined;
+
+    if (typeof data.metadata === 'string') {
+      try {
+        const entries: [string, string][] = JSON.parse(data.metadata);
+        const textEntry = entries.find(([mime]) => mime === 'text/plain');
+        if (textEntry) description = textEntry[1];
+
+        const imageEntry = entries.find(([mime]) =>
+          mime.startsWith('image/png') || mime.startsWith('image/jpeg')
+        );
+        if (imageEntry) {
+          image = `data:${imageEntry[0]};base64,${imageEntry[1]}`;
+        }
+      } catch {
+        // Metadata parsing failed — not critical
+      }
+    }
+
+    return {
+      callback: data.callback,
+      minSendable: data.minSendable,
+      maxSendable: data.maxSendable,
+      metadata: data.metadata || '',
+      description,
+      image,
+      domain,
+      commentAllowed: typeof data.commentAllowed === 'number' ? data.commentAllowed : undefined,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('LNURL request timed out after 10s');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**
@@ -245,24 +253,34 @@ export async function requestLnurlInvoice(
     url.searchParams.set('comment', comment);
   }
 
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(`LNURL callback returned ${response.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url.toString(), { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`LNURL callback returned ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status === 'ERROR') {
+      throw new Error(data.reason || 'LNURL callback returned an error');
+    }
+
+    if (typeof data.pr !== 'string') {
+      throw new Error('LNURL callback did not return an invoice');
+    }
+
+    return {
+      pr: data.pr,
+      successAction: data.successAction,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('LNURL request timed out after 10s');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const data = await response.json();
-
-  // Check for error response
-  if (data.status === 'ERROR') {
-    throw new Error(data.reason || 'LNURL callback returned an error');
-  }
-
-  if (typeof data.pr !== 'string') {
-    throw new Error('LNURL callback did not return an invoice');
-  }
-
-  return {
-    pr: data.pr,
-    successAction: data.successAction,
-  };
 }
