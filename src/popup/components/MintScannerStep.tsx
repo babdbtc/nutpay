@@ -126,7 +126,15 @@ export function MintScannerStep({
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
           <h2 className="text-lg font-semibold text-white">Recovering Wallet</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Scanning mints for your ecash...
+            {(() => {
+              const total = recoveryProgress.length;
+              if (total === 0) return 'Scanning mints for your ecash...';
+              const scanIdx = recoveryProgress.findIndex(p => p.status === 'scanning');
+              const mintNum = scanIdx >= 0 ? scanIdx + 1 : total;
+              const proofsTotal = recoveryProgress.reduce((sum, p) => sum + p.proofsFound, 0);
+              const proofsText = proofsTotal > 0 ? ` — ${proofsTotal} proofs found so far` : '';
+              return `Scanning mint ${mintNum} of ${total}...${proofsText}`;
+            })()}
           </p>
         </div>
 
