@@ -9,6 +9,8 @@
  * - LUD-16: Lightning address — https://github.com/lnurl/luds/blob/luds/16.md
  */
 
+import { bech32 } from '@scure/base';
+
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface LnurlPayParams {
@@ -112,51 +114,15 @@ function lightningAddressToUrl(address: string): string {
 /**
  * Decode a bech32-encoded LNURL to the cleartext URL.
  * LNURL uses bech32 encoding with hrp "lnurl".
+ * Throws on invalid checksum or bad characters.
  */
-function decodeLnurl(lnurl: string): string {
-  // Remove lnurl: prefix if present
+export function decodeLnurl(lnurl: string): string {
   let cleaned = lnurl.trim();
   if (cleaned.toLowerCase().startsWith('lnurl:')) {
     cleaned = cleaned.substring(6);
   }
-
-  // Bech32 decode — manual implementation for LNURL (no heavy deps)
-  const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
-  const decoded = cleaned.toLowerCase();
-
-  // Find the separator (last '1')
-  const sepIdx = decoded.lastIndexOf('1');
-  if (sepIdx < 1) throw new Error('Invalid LNURL: no separator');
-
-  const data = decoded.substring(sepIdx + 1, decoded.length - 6); // strip checksum
-  const values: number[] = [];
-  for (const c of data) {
-    const idx = CHARSET.indexOf(c);
-    if (idx === -1) throw new Error(`Invalid LNURL: bad character '${c}'`);
-    values.push(idx);
-  }
-
-  // Convert 5-bit values to 8-bit bytes
-  const bytes = convert5to8(values);
-  return new TextDecoder().decode(new Uint8Array(bytes));
-}
-
-/** Convert 5-bit groups to 8-bit bytes (bech32 data conversion) */
-function convert5to8(data: number[]): number[] {
-  let acc = 0;
-  let bits = 0;
-  const result: number[] = [];
-
-  for (const value of data) {
-    acc = (acc << 5) | value;
-    bits += 5;
-    while (bits >= 8) {
-      bits -= 8;
-      result.push((acc >> bits) & 0xff);
-    }
-  }
-
-  return result;
+  const { bytes } = bech32.decodeToBytes(cleaned.toLowerCase());
+  return new TextDecoder().decode(bytes);
 }
 
 /**
