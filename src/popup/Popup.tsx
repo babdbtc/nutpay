@@ -3,6 +3,7 @@ import { useWalletAuth } from '../hooks/useWalletAuth';
 import { useWalletData } from '../hooks/useWalletData';
 import { usePageEcash } from '../hooks/usePageEcash';
 import { WalletView } from '../components/shared/WalletView';
+import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { PanelRightOpen } from 'lucide-react';
 
@@ -52,28 +53,30 @@ function Popup() {
     : undefined;
 
   return (
-    <WalletView
-      {...auth}
-      {...data}
-      onUnlock={handleUnlock}
-      pageTokens={ecash.pageTokens}
-      claimingPage={ecash.claimingPage}
-      claimResult={ecash.claimResult}
-      claimPageTokens={ecash.claimPageTokens}
-      claimSingleToken={ecash.claimSingleToken}
-      containerClass="popup-container"
-      headerActions={
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={openSidePanel}
-          className="text-muted-foreground hover:text-foreground"
-          title="Open in side panel"
-        >
-          <PanelRightOpen className="h-5 w-5" />
-        </Button>
-      }
-    />
+    <ErrorBoundary>
+      <WalletView
+        {...auth}
+        {...data}
+        onUnlock={handleUnlock}
+        pageTokens={ecash.pageTokens}
+        claimingPage={ecash.claimingPage}
+        claimResult={ecash.claimResult}
+        claimPageTokens={ecash.claimPageTokens}
+        claimSingleToken={ecash.claimSingleToken}
+        containerClass="popup-container"
+        headerActions={
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={openSidePanel}
+            className="text-muted-foreground hover:text-foreground"
+            title="Open in side panel"
+          >
+            <PanelRightOpen className="h-5 w-5" />
+          </Button>
+        }
+      />
+    </ErrorBoundary>
   );
 }
 

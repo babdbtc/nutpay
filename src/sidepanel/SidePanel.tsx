@@ -3,6 +3,7 @@ import { useWalletAuth } from '../hooks/useWalletAuth';
 import { useWalletData } from '../hooks/useWalletData';
 import { usePageEcash } from '../hooks/usePageEcash';
 import { WalletView } from '../components/shared/WalletView';
+import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 
@@ -28,27 +29,29 @@ function SidePanel() {
   };
 
   return (
-    <WalletView
-      {...auth}
-      {...data}
-      pageTokens={ecash.pageTokens}
-      claimingPage={ecash.claimingPage}
-      claimResult={ecash.claimResult}
-      claimPageTokens={ecash.claimPageTokens}
-      claimSingleToken={ecash.claimSingleToken}
-      containerClass="sidepanel-container"
-      headerActions={
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleRefresh}
-          className="text-muted-foreground hover:text-foreground"
-          title="Refresh"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-        </Button>
-      }
-    />
+    <ErrorBoundary>
+      <WalletView
+        {...auth}
+        {...data}
+        pageTokens={ecash.pageTokens}
+        claimingPage={ecash.claimingPage}
+        claimResult={ecash.claimResult}
+        claimPageTokens={ecash.claimPageTokens}
+        claimSingleToken={ecash.claimSingleToken}
+        containerClass="sidepanel-container"
+        headerActions={
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            className="text-muted-foreground hover:text-foreground"
+            title="Refresh"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        }
+      />
+    </ErrorBoundary>
   );
 }
 
