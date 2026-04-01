@@ -24,6 +24,7 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
   const [status, setStatus] = useState<'idle' | 'waiting' | 'paid' | 'minting' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const activeQuoteRef = useRef<string | null>(null);
   // Keep current quote data in a ref so the message listener closure
@@ -78,6 +79,20 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [status, amount, loading, onClose]);
+
+  useEffect(() => {
+    if (!quote) {
+      setCountdown(null);
+      return;
+    }
+    const update = () => {
+      const remaining = Math.floor((quote.expiresAt - Date.now()) / 1000);
+      setCountdown(remaining);
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [quote]);
 
   const enabledMints = mints.filter((m) => m.enabled);
 
@@ -210,6 +225,15 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
           <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
             <Clock className="h-4 w-4 animate-pulse" />
             Waiting for payment...
+          </div>
+        )}
+
+        {status === 'waiting' && countdown !== null && countdown < 60 && (
+          <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-red-500/10 text-red-400 text-xs">
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            {countdown <= 0
+              ? 'Invoice expired. Create a new one.'
+              : `Invoice expires in ${countdown} second${countdown === 1 ? '' : 's'}`}
           </div>
         )}
 
