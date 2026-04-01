@@ -33,6 +33,9 @@ const foundTokens = new Set<string>();
 // Tokens currently displayed in the toast (mutable — entries are zeroed out after claiming)
 let pendingTokens: ToastToken[] = [];
 
+// MutationObserver instance — stored so it can be disconnected on page unload
+let domObserver: MutationObserver | null = null;
+
 // Theme color map — matches the preview colors from each theme definition
 const THEME_COLORS: Record<string, ToastColors> = {
   classic:  { bg: '#16162a', card: '#252542', accent: '#f97316' },
@@ -317,29 +320,38 @@ function runInitialScan(): void {
 }
 
 function observeDOMChanges(): void {
-  const observer = new MutationObserver((mutations) => {
-    const newTokens: Array<{ token: string; element: Element | null }> = [];
+  const debounceBuffer: Array<{ token: string; element: Element | null }> = [];
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  domObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
-        newTokens.push(...scanNode(node));
+        debounceBuffer.push(...scanNode(node));
       }
     }
 
-    if (newTokens.length > 0) {
-      console.log(`[Nutpay] Found ${newTokens.length} new ecash token(s)`);
-      resolveAmounts(newTokens).then((withAmounts) => {
-        pendingTokens.push(...withAmounts);
-        if (autoClaimEnabled) {
-          autoClaimTokensFn(withAmounts);
-        } else {
-          showClaimToast(pendingTokens);
-        }
-      });
+    if (debounceBuffer.length > 0) {
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => {
+        const batch = debounceBuffer.splice(0);
+        debounceTimer = null;
+        if (batch.length === 0) return;
+        console.log(`[Nutpay] Found ${batch.length} new ecash token(s)`);
+        resolveAmounts(batch).then((withAmounts) => {
+          pendingTokens.push(...withAmounts);
+          if (autoClaimEnabled) {
+            autoClaimTokensFn(withAmounts);
+          } else {
+            showClaimToast(pendingTokens);
+          }
+        });
+      }, 100);
     }
   });
 
-  observer.observe(document.body, {
+  domObserver.observe(document.body, {
     childList: true,
     subtree: true,
   });
@@ -356,13 +368,14 @@ export function getFoundTokens(): Array<{ token: string; amount: number | null }
 
 /** Called when the popup/sidepanel claims tokens — dismiss the toast so it doesn't linger. */
 export function handleTokensClaimed(): void {
-  pendingTokens = pendingTokens.map(t => ({ ...t, token: '', amount: 0, element: null }));
+  pendingTokens = [];
   dismissToast();
 }
 
 /** Initialize the ecash scanner. */
 export async function initEcashScanner(): Promise<void> {
   await loadSettings();
+  window.addEventListener('pagehide', () => domObserver?.disconnect());
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
