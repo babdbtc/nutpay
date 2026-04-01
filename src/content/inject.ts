@@ -28,7 +28,7 @@ function generateRequestId(): string {
 
 // Send message to content script
 function sendToContent(message: unknown): void {
-  window.postMessage({ source: MESSAGE_TO_CONTENT, payload: message }, '*');
+  window.postMessage({ source: MESSAGE_TO_CONTENT, payload: message }, window.location.origin);
 }
 
 // Listen for messages from content script

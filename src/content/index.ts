@@ -38,7 +38,7 @@ function injectScript(): void {
 function postToInjected(message: unknown): void {
   window.postMessage(
     { source: MSG_FROM_CONTENT, payload: message },
-    '*'
+    window.location.origin
   );
 }
 
