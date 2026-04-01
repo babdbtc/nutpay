@@ -78,6 +78,8 @@ import type { SecurityConfig } from '../shared/types';
 import { updateBadgeBalance } from './badge-manager';
 import { setupContextMenus, handleContextMenuClick } from './context-menu';
 
+let pendingReconciliationOnUnlock = false;
+
 // Ensure a random encryption key is in session storage for no-security mode.
 // This handles: fresh install, browser restart, security disabled.
 // For no-security wallets, we also perform one-time migration from the
@@ -359,6 +361,15 @@ async function handleMessage(
         await extendSession();
         // Wallet unlocked - update badge to show balance
         setTimeout(() => updateBadgeBalance(), 300);
+        if (pendingReconciliationOnUnlock) {
+          pendingReconciliationOnUnlock = false;
+          reconcileProofStates().catch((error) => {
+            console.warn('[Nutpay] Post-unlock reconciliation failed:', error);
+          });
+          recoverStuckPendingProofs().catch((error) => {
+            console.warn('[Nutpay] Post-unlock stuck proof recovery failed:', error);
+          });
+        }
         return { success: true };
       } else {
         const isNowLocked = await recordFailedAttempt();
@@ -769,6 +780,7 @@ import { reconcileProofStates, recoverPendingProofs } from '../core/wallet/proof
     // Security is enabled — only proceed if session key is available
     if (!(await hasSessionKey())) {
       console.log('[Nutpay] Startup: wallet locked, skipping proof reconciliation');
+      pendingReconciliationOnUnlock = true;
       return;
     }
   }
