@@ -79,7 +79,7 @@ describe('waitForApproval + handlePopupClosed', () => {
 
 describe('cancelApproval', () => {
   it('resolves as denied when approval is cancelled', async () => {
-    (globalThis.chrome.windows as { remove: ReturnType<typeof vi.fn> }).remove =
+    (globalThis.chrome.windows as unknown as { remove: ReturnType<typeof vi.fn> }).remove =
       vi.fn().mockResolvedValue(undefined);
 
     const promise = waitForApproval('req-cancel-1', 77);

@@ -43,6 +43,7 @@
     }
   ],
   "action": {
+    "default_title": "Nutpay - Cashu Wallet",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "assets/icons/icon-16.png",
