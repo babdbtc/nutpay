@@ -104,6 +104,17 @@ export function LightningPayTab({
           </CardContent>
         </Card>
 
+        <p className="text-xs text-muted-foreground text-center -mt-2">
+          Any unused fee reserve will be returned to your wallet
+        </p>
+
+        {meltQuote.amount + meltQuote.fee > selectedBalance && (
+          <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-yellow-500/10 text-yellow-500 text-xs">
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            Insufficient balance — need {formatAmount(meltQuote.amount + meltQuote.fee, displayFormat)}, have {formatAmount(selectedBalance, displayFormat)}
+          </div>
+        )}
+
         {error && (
           <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
             <AlertCircle className="h-4 w-4" />
