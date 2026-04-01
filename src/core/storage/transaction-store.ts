@@ -24,7 +24,14 @@ export async function addTransaction(
   // Add to front, keep only last MAX_TRANSACTIONS
   const updated = [newTx, ...transactions].slice(0, MAX_TRANSACTIONS);
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.TRANSACTIONS]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.TRANSACTIONS]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return newTx;
 }
 
@@ -38,7 +45,14 @@ export async function updateTransactionStatus(
     tx.id === id ? { ...tx, status } : tx
   );
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.TRANSACTIONS]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.TRANSACTIONS]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
 }
 
 // Get recent transactions
