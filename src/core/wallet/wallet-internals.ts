@@ -14,8 +14,8 @@ export async function verifyDleqIfSupported(wallet: Wallet, proofs: Proof[], min
   const dleqSupported = await mintSupportsNut(mintUrl, 12);
   if (!dleqSupported || proofs.length === 0) return;
 
-  const keyset = wallet.getKeyset();
   for (const proof of proofs) {
+    const keyset = wallet.getKeyset(proof.id);
     if (!hasValidDleq(proof, keyset)) {
       throw new Error('Mint returned proofs with invalid or missing DLEQ signature (NUT-12)');
     }
