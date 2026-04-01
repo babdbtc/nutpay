@@ -177,28 +177,44 @@ export function showClaimToast(
   `);
 
   // --- Header row: title + dismiss ---
-  const headerHtml = `
-    <div style="display: flex; align-items: center; justify-content: space-between;">
-      <div>
-        <div style="font-weight: 600; font-size: 13px;">Ecash found</div>
-        <div style="font-size: 11px; color: #888;">${count} token${count > 1 ? 's' : ''} on this page${totalAmount > 0 ? ` \u00b7 ${totalAmount} sats total` : ''}</div>
-      </div>
-      <button id="nutpay-dismiss-btn" style="
-        flex-shrink: 0;
-        background: none;
-        border: none;
-        color: #555;
-        cursor: pointer;
-        padding: 2px;
-        font-size: 16px;
-        line-height: 1;
-      ">&times;</button>
-    </div>
-  `;
+  const headerDiv = document.createElement('div');
+  headerDiv.setAttribute('style', 'display: flex; align-items: center; justify-content: space-between;');
+
+  const titleDiv = document.createElement('div');
+  const titleMain = document.createElement('div');
+  titleMain.setAttribute('style', 'font-weight: 600; font-size: 13px;');
+  titleMain.textContent = 'Ecash found';
+
+  const titleSub = document.createElement('div');
+  titleSub.setAttribute('style', 'font-size: 11px; color: #888;');
+  titleSub.textContent = `${count} token${count > 1 ? 's' : ''} on this page${totalAmount > 0 ? ` \u00b7 ${totalAmount} sats total` : ''}`;
+
+  titleDiv.appendChild(titleMain);
+  titleDiv.appendChild(titleSub);
+
+  const headerDismissBtn = document.createElement('button');
+  headerDismissBtn.id = 'nutpay-dismiss-btn';
+  headerDismissBtn.setAttribute('style', `
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    padding: 2px;
+    font-size: 16px;
+    line-height: 1;
+  `);
+  headerDismissBtn.textContent = '×';
+
+  headerDiv.appendChild(titleDiv);
+  headerDiv.appendChild(headerDismissBtn);
+  toast.appendChild(headerDiv);
 
   // --- Claim All button (shown when multiple tokens) ---
-  const claimAllHtml = count > 1 ? `
-    <button id="nutpay-claim-all-btn" style="
+  if (count > 1) {
+    const claimAllBtn = document.createElement('button');
+    claimAllBtn.id = 'nutpay-claim-all-btn';
+    claimAllBtn.setAttribute('style', `
       width: 100%;
       background: ${accent};
       color: ${textColor};
@@ -208,41 +224,60 @@ export function showClaimToast(
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-    ">Claim All${totalAmount > 0 ? ` (${totalAmount} sats)` : ''}</button>
-  ` : '';
+    `);
+    claimAllBtn.textContent = `Claim All${totalAmount > 0 ? ` (${totalAmount} sats)` : ''}`;
+    toast.appendChild(claimAllBtn);
+  }
 
   // --- Individual token rows ---
-  const tokenRowsHtml = tokens.map((t, i) => {
+  tokens.forEach((t, i) => {
     const amountLabel = t.amount !== null ? `${t.amount} sats` : 'unknown';
-    return `
-      <div id="nutpay-token-row-${i}" style="
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 4px 0;
-        ${i < count - 1 ? `border-bottom: 1px solid rgba(255, 255, 255, 0.05);` : ''}
-      ">
-        <div style="flex: 1; min-width: 0;">
-          <span style="font-size: 12px; font-weight: 500; color: #ccc;">${amountLabel}</span>
-          <span style="font-size: 10px; color: #555; margin-left: 6px;">${truncateToken(t.token)}</span>
-        </div>
-        <button class="nutpay-claim-single-btn" data-index="${i}" style="
-          flex-shrink: 0;
-          background: ${count > 1 ? 'rgba(255, 255, 255, 0.08)' : accent};
-          color: ${count > 1 ? '#ccc' : textColor};
-          border: ${count > 1 ? '1px solid rgba(255, 255, 255, 0.1)' : 'none'};
-          border-radius: 6px;
-          padding: 4px 10px;
-          font-size: 11px;
-          font-weight: 600;
-          cursor: pointer;
-        ">Claim</button>
-      </div>
-    `;
-  }).join('');
 
-  toast.innerHTML = headerHtml + claimAllHtml + tokenRowsHtml;
+    const rowDiv = document.createElement('div');
+    rowDiv.id = `nutpay-token-row-${i}`;
+    rowDiv.setAttribute('style', `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 0;
+      ${i < count - 1 ? `border-bottom: 1px solid rgba(255, 255, 255, 0.05);` : ''}
+    `);
+
+    const infoDiv = document.createElement('div');
+    infoDiv.setAttribute('style', 'flex: 1; min-width: 0;');
+
+    const amountSpan = document.createElement('span');
+    amountSpan.setAttribute('style', 'font-size: 12px; font-weight: 500; color: #ccc;');
+    amountSpan.textContent = amountLabel;
+
+    const tokenSpan = document.createElement('span');
+    tokenSpan.setAttribute('style', 'font-size: 10px; color: #555; margin-left: 6px;');
+    tokenSpan.textContent = truncateToken(t.token);
+
+    infoDiv.appendChild(amountSpan);
+    infoDiv.appendChild(tokenSpan);
+
+    const claimBtn = document.createElement('button');
+    claimBtn.className = 'nutpay-claim-single-btn';
+    claimBtn.setAttribute('data-index', String(i));
+    claimBtn.setAttribute('style', `
+      flex-shrink: 0;
+      background: ${count > 1 ? 'rgba(255, 255, 255, 0.08)' : accent};
+      color: ${count > 1 ? '#ccc' : textColor};
+      border: ${count > 1 ? '1px solid rgba(255, 255, 255, 0.1)' : 'none'};
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    `);
+    claimBtn.textContent = 'Claim';
+
+    rowDiv.appendChild(infoDiv);
+    rowDiv.appendChild(claimBtn);
+    toast.appendChild(rowDiv);
+  });
 
   document.body.appendChild(toast);
   toastElement = toast;
@@ -309,21 +344,31 @@ export function showAutoClaimSuccessToast(amount: number, colors: ToastColors): 
     animation: nutpay-slide-in 0.25s ease-out;
   `);
 
-  toast.innerHTML = `
-    <div style="flex: 1; min-width: 0;">
-      <div style="font-weight: 600; font-size: 13px; color: #22c55e;">Claimed ${amount} sats</div>
-    </div>
-    <button id="nutpay-dismiss-btn" style="
-      flex-shrink: 0;
-      background: none;
-      border: none;
-      color: #555;
-      cursor: pointer;
-      padding: 2px;
-      font-size: 16px;
-      line-height: 1;
-    ">&times;</button>
-  `;
+  const contentDiv = document.createElement('div');
+  contentDiv.setAttribute('style', 'flex: 1; min-width: 0;');
+
+  const messageDiv = document.createElement('div');
+  messageDiv.setAttribute('style', 'font-weight: 600; font-size: 13px; color: #22c55e;');
+  messageDiv.textContent = `Claimed ${amount} sats`;
+
+  contentDiv.appendChild(messageDiv);
+  toast.appendChild(contentDiv);
+
+  const successDismissBtn = document.createElement('button');
+  successDismissBtn.id = 'nutpay-dismiss-btn';
+  successDismissBtn.setAttribute('style', `
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    padding: 2px;
+    font-size: 16px;
+    line-height: 1;
+  `);
+  successDismissBtn.textContent = '×';
+
+  toast.appendChild(successDismissBtn);
 
   document.body.appendChild(toast);
   toastElement = toast;
@@ -360,7 +405,11 @@ export function showRowClaimSuccess(index: number, amount: number): void {
 
   const info = row.querySelector('div[style*="flex: 1"]');
   if (info) {
-    info.innerHTML = `<span style="font-size: 12px; font-weight: 500; color: #22c55e;">Claimed ${amount} sats</span>`;
+    info.textContent = '';
+    const span = document.createElement('span');
+    span.setAttribute('style', 'font-size: 12px; font-weight: 500; color: #22c55e;');
+    span.textContent = `Claimed ${amount} sats`;
+    info.appendChild(span);
   }
 }
 
@@ -374,7 +423,11 @@ export function showRowFailed(index: number): void {
 
   const info = row.querySelector('div[style*="flex: 1"]');
   if (info) {
-    info.innerHTML = `<span style="font-size: 12px; font-weight: 500; color: #ef4444;">Invalid or already spent</span>`;
+    info.textContent = '';
+    const span = document.createElement('span');
+    span.setAttribute('style', 'font-size: 12px; font-weight: 500; color: #ef4444;');
+    span.textContent = 'Invalid or already spent';
+    info.appendChild(span);
   }
 }
 
