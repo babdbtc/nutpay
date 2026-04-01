@@ -19,7 +19,9 @@ async function notifyContentScript(): Promise<void> {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, { type: 'PAGE_TOKENS_CLAIMED' }).catch(() => {});
+      chrome.tabs.sendMessage(tab.id, { type: 'PAGE_TOKENS_CLAIMED' }).catch(() => {
+        // Intentionally silent — tab may not have a content script injected
+      });
     }
   } catch {
     // Content script not available — ignore
