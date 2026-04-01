@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { isLightningAddress, isLnurl, detectInputType } from './lnurl';
+import { bech32 } from '@scure/base';
+import { isLightningAddress, isLnurl, detectInputType, decodeLnurl } from './lnurl';
 
 describe('isLightningAddress', () => {
   it('returns true for valid Lightning addresses', () => {
@@ -84,5 +85,21 @@ describe('detectInputType', () => {
     const result = detectInputType('  lnbc100n1pjABC  ');
     expect(result.type).toBe('bolt11');
     expect(result.value).toBe('lnbc100n1pjABC');
+  });
+});
+
+describe('decodeLnurl', () => {
+  it('decodes a valid bech32 LNURL to its URL', () => {
+    const url = 'https://example.com/lnurlp/testuser';
+    const encoded = bech32.encodeFromBytes('lnurl', new TextEncoder().encode(url));
+    expect(decodeLnurl(encoded)).toBe(url);
+  });
+
+  it('throws on invalid bech32 checksum', () => {
+    const url = 'https://example.com/lnurlp/testuser';
+    const valid = bech32.encodeFromBytes('lnurl', new TextEncoder().encode(url));
+    const lastChar = valid[valid.length - 1];
+    const corrupted = valid.slice(0, -1) + (lastChar === 'q' ? 'p' : 'q');
+    expect(() => decodeLnurl(corrupted)).toThrow();
   });
 });
