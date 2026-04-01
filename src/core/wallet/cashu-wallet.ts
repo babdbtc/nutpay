@@ -1,4 +1,4 @@
-import { getEncodedTokenV4, getDecodedToken, hasValidDleq, type Proof, type MintQuoteResponse, type MeltQuoteResponse, type Wallet, type NUT10Option, type P2PKOptions, type SigFlag } from '@cashu/cashu-ts';
+import { getEncodedTokenV4, getDecodedToken, hasValidDleq, CheckStateEnum, type Proof, type MintQuoteResponse, type MeltQuoteResponse, type Wallet, type NUT10Option, type P2PKOptions, type SigFlag } from '@cashu/cashu-ts';
 import { getWalletForMint, discoverMint, findMintForPayment, mintSupportsNut } from './mint-manager';
 import {
   selectProofs,
@@ -8,6 +8,7 @@ import {
   finalizePendingSpend,
   revertPendingProofs,
 } from './proof-manager';
+import { getPendingSpendProofs, removeProofs } from '../storage/proof-store';
 import { addTransaction, updateTransactionStatus } from '../storage/transaction-store';
 import { addPendingMintQuote, updateMintQuoteStatus, getPendingMintQuoteByQuoteId } from '../storage/pending-quote-store';
 import { addPendingToken, updatePendingTokenStatus } from '../storage/pending-token-store';
@@ -903,4 +904,63 @@ export async function payLightningInvoice(
       error: error instanceof Error ? error.message : 'Failed to pay Lightning invoice',
     };
   }
+}
+
+export async function recoverStuckPendingProofs(): Promise<{ recovered: number; removed: number }> {
+  const pendingProofs = await getPendingSpendProofs();
+  const STUCK_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+  const now = Date.now();
+
+  const stuckProofs = pendingProofs.filter(
+    (sp) => now - sp.dateReceived > STUCK_THRESHOLD
+  );
+
+  if (stuckProofs.length === 0) {
+    return { recovered: 0, removed: 0 };
+  }
+
+  const byMint = new Map<string, typeof stuckProofs>();
+  for (const sp of stuckProofs) {
+    const existing = byMint.get(sp.mintUrl) ?? [];
+    byMint.set(sp.mintUrl, [...existing, sp]);
+  }
+
+  let recovered = 0;
+  let removed = 0;
+
+  for (const [mintUrl, mintProofs] of byMint) {
+    const proofs = mintProofs.map((sp) => sp.proof);
+    let states: { state: CheckStateEnum }[] | null = null;
+
+    // Retry with exponential backoff
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      try {
+        const wallet = await getWalletForMint(mintUrl);
+        states = await wallet.checkProofsStates(proofs);
+        break;
+      } catch {
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, attempt * 1000 + 1000));
+        } else {
+          console.warn(`[Nutpay] Recovery: mint ${mintUrl} unreachable, leaving ${proofs.length} stuck proofs`);
+        }
+      }
+    }
+
+    if (!states) continue;
+
+    const spentProofs = proofs.filter((_, i) => states![i]?.state === CheckStateEnum.SPENT);
+    const unspentProofs = proofs.filter((_, i) => states![i]?.state === CheckStateEnum.UNSPENT);
+
+    if (spentProofs.length > 0) {
+      await removeProofs(spentProofs);
+      removed += spentProofs.length;
+    }
+    if (unspentProofs.length > 0) {
+      await revertPendingProofs(unspentProofs);
+      recovered += unspentProofs.length;
+    }
+  }
+
+  return { recovered, removed };
 }
