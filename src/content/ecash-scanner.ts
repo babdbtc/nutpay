@@ -56,7 +56,9 @@ let autoClaimEnabled = false;
 
 /** Notify the popup/sidepanel (if open) that tokens were claimed from the in-page toast. */
 function notifyPopupTokensClaimed(): void {
-  chrome.runtime.sendMessage({ type: 'PAGE_TOKENS_CLAIMED' }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'PAGE_TOKENS_CLAIMED' }).catch(() => {
+    // Intentionally silent — service worker may be inactive when notification fires
+  });
 }
 
 // ─── Settings & Token Decoding ───────────────────────────────────────────────
@@ -142,7 +144,9 @@ function promptUnlockAndClaim(): void {
   showUnlockWaitingState(pendingTokens.length);
 
   // Open the popup
-  chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'OPEN_POPUP' }).catch(() => {
+    // Intentionally silent — service worker may be inactive when notification fires
+  });
 
   // Poll for unlock every 1.5s, auto-claim when unlocked
   setUnlockPoll(async () => {

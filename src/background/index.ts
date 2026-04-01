@@ -812,7 +812,9 @@ chrome.runtime.onInstalled.addListener((details) => {
     setupContextMenus();
     // Enable side panel to open on action click (user can toggle)
     if (chrome.sidePanel) {
-      chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+      chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {
+        // Intentionally silent — sidePanel API may not be available in all Chrome versions
+      });
     }
   } else if (details.reason === 'update') {
     console.log('[Nutpay] Extension updated');

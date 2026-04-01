@@ -45,10 +45,12 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
         chrome.runtime.sendMessage({
           type: 'UNSUBSCRIBE_MINT_QUOTE',
           quoteId: activeQuoteRef.current,
-        }).catch(() => {});
+        }).catch(() => {
+          // Intentionally silent — service worker may be inactive on popup unmount; quote expires naturally
+        });
         activeQuoteRef.current = null;
-      }
-    };
+      };
+    }
   }, []);
 
   // Keyboard shortcuts
@@ -174,7 +176,9 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
       chrome.runtime.sendMessage({
         type: 'UNSUBSCRIBE_MINT_QUOTE',
         quoteId: activeQuoteRef.current,
-      }).catch(() => {});
+      }).catch(() => {
+        // Intentionally silent — service worker may be inactive on popup unmount; quote expires naturally
+      });
       activeQuoteRef.current = null;
     }
     quoteRef.current = null;

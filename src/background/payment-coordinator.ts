@@ -70,7 +70,9 @@ export function waitForApproval(
       reject(new Error('Approval timeout'));
 
       // Close the popup if still open
-      chrome.windows.remove(popupId).catch(() => {});
+      chrome.windows.remove(popupId).catch(() => {
+        // Intentionally silent — window may already be closed
+      });
     }, TIMEOUTS.APPROVAL_POPUP);
 
     approvalCallbacks.set(requestId, {
@@ -124,7 +126,9 @@ export function cancelApproval(requestId: string): void {
     approvalCallbacks.delete(requestId);
 
     if (callback.popupId) {
-      chrome.windows.remove(callback.popupId).catch(() => {});
+      chrome.windows.remove(callback.popupId).catch(() => {
+        // Intentionally silent — window may already be closed
+      });
     }
   }
 }
@@ -158,7 +162,9 @@ export function waitForUnlock(
       reject(new Error('Unlock timeout'));
 
       // Close the popup if still open
-      chrome.windows.remove(popupId).catch(() => {});
+      chrome.windows.remove(popupId).catch(() => {
+        // Intentionally silent — window may already be closed
+      });
     }, TIMEOUTS.APPROVAL_POPUP);
 
     unlockCallbacks.set(requestId, {
