@@ -1,4 +1,4 @@
-import { getEncodedTokenV4, CheckStateEnum, type Proof, type MintQuoteResponse, type MeltQuoteResponse } from '@cashu/cashu-ts';
+import { getEncodedTokenV4, CheckStateEnum, getPubKeyFromPrivKey, type Proof, type MintQuoteResponse, type MeltQuoteResponse } from '@cashu/cashu-ts';
 import { getWalletForMint, mintSupportsNut } from './mint-manager';
 import {
   selectProofsForSpend,
@@ -11,10 +11,23 @@ import { getPendingSpendProofs, removeProofs } from '../storage/proof-store';
 import { addTransaction } from '../storage/transaction-store';
 import { addPendingMintQuote, updateMintQuoteStatus, getPendingMintQuoteByQuoteId } from '../storage/pending-quote-store';
 import { addPendingToken, updatePendingTokenStatus } from '../storage/pending-token-store';
-import { hasSeed } from '../storage/seed-store';
+import { hasSeed, getSeed } from '../storage/seed-store';
 import type { PendingMintQuote, MeltQuoteInfo, PendingToken } from '../../shared/types';
 import { normalizeMintUrl } from '../../shared/format';
 import { verifyDleqIfSupported } from './wallet-internals';
+
+// Derive a deterministic secp256k1 keypair from the BIP39 seed for NUT-20 quote binding.
+// SHA-256 with a domain label keeps this key separate from cashu-ts BIP32 derivation.
+async function deriveNut20Keypair(seed: Uint8Array): Promise<{ privkeyHex: string; pubkeyHex: string }> {
+  const label = new TextEncoder().encode('cashu-nut20');
+  const material = new Uint8Array(seed.length + label.length);
+  material.set(seed);
+  material.set(label, seed.length);
+  const privkeyBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', material));
+  const pubkeyBytes = getPubKeyFromPrivKey(privkeyBytes);
+  const toHex = (b: Uint8Array) => Array.from(b, (v) => v.toString(16).padStart(2, '0')).join('');
+  return { privkeyHex: toHex(privkeyBytes), pubkeyHex: toHex(pubkeyBytes) };
+}
 
 // ==================== Lightning Receive ====================
 
@@ -31,8 +44,17 @@ export async function createLightningReceiveInvoice(
     const normalizedUrl = normalizeMintUrl(mintUrl);
     const wallet = await getWalletForMint(normalizedUrl);
 
-    // Create mint quote
-    const mintQuote: MintQuoteResponse = await wallet.createMintQuote(amount);
+    // NUT-20: bind quote to wallet pubkey if supported, preventing quote hijacking
+    const seedExists = await hasSeed();
+    const nut20Supported = seedExists && await mintSupportsNut(normalizedUrl, 20);
+    let mintQuote: MintQuoteResponse;
+    if (nut20Supported) {
+      const seed = await getSeed();
+      const { pubkeyHex } = await deriveNut20Keypair(seed!);
+      mintQuote = await wallet.createLockedMintQuote(amount, pubkeyHex);
+    } else {
+      mintQuote = await wallet.createMintQuote(amount);
+    }
 
     // Calculate expiry (default to 1 hour if not provided)
     const expiresAt = mintQuote.expiry
@@ -113,11 +135,15 @@ export async function mintProofsFromQuote(
     const mintQuote = await wallet.checkMintQuote(quoteId);
 
     if (seedExists) {
-      // Use deterministic secrets (NUT-13)
-      proofs = await wallet.ops
-        .mintBolt11(amount, mintQuote)
-        .asDeterministic(0) // Auto-reserve counters
-        .run();
+      // NUT-13 deterministic secrets; NUT-20: sign locked quote when quote.pubkey is set
+      const builder = wallet.ops.mintBolt11(amount, mintQuote).asDeterministic(0);
+      if (mintQuote.pubkey) {
+        const seed = await getSeed();
+        const { privkeyHex } = await deriveNut20Keypair(seed!);
+        proofs = await builder.privkey(privkeyHex).run();
+      } else {
+        proofs = await builder.run();
+      }
     } else {
       // Legacy: random secrets
       proofs = await wallet.mintProofs(amount, quoteId);
