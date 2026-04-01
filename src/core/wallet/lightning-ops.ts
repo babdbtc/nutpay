@@ -406,9 +406,13 @@ export async function payLightningInvoice(
           //
           // Wrap cleanup in its own try/catch so a storage error doesn't mask
           // the fact that the Lightning payment succeeded.
-          try {
-            await finalizePendingSpend(selection.proofs, [], normalizedUrl);
-            await updatePendingTokenStatus(pendingToken.id, 'claimed');
+           try {
+             // Payment confirmed successful. We cannot unblind change proofs from checkMeltQuote()
+             // (it returns blinded signatures, not final proofs). Any overpayment change is temporarily
+             // lost but fully recoverable: if the wallet uses NUT-13 deterministic secrets, running
+             // seed recovery will re-derive these change proofs from the seed phrase.
+             await finalizePendingSpend(selection.proofs, [], normalizedUrl);
+             await updatePendingTokenStatus(pendingToken.id, 'claimed');
             meltQuoteCache.delete(quoteId);
 
             await addTransaction({
