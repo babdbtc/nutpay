@@ -3,6 +3,7 @@ import type { Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
 import { applyTheme } from '../shared/theme';
+import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -178,6 +179,7 @@ function Approval() {
   }
 
   return (
+    <ErrorBoundary>
     <div className="approval-container bg-background min-h-screen text-white flex flex-col gap-4">
       {/* Header */}
       <div className="text-center mb-2">
@@ -263,6 +265,7 @@ function Approval() {
         Auto-deny in {timeLeft}s
       </p>
     </div>
+    </ErrorBoundary>
   );
 }
 

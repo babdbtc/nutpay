@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import type { Settings, MintConfig, AllowlistEntry, ThemeId } from '../shared/types';
 import { PRESET_MINTS, DEFAULT_SETTINGS, THEMES } from '../shared/constants';
 import { formatAmount } from '../shared/format';
@@ -450,6 +451,7 @@ function Options() {
   }
 
   return (
+    <ErrorBoundary>
     <div className="options-container bg-background min-h-screen text-white">
       {/* Header */}
       <div className="mb-8">
@@ -1233,6 +1235,7 @@ function Options() {
         </DialogContent>
       </Dialog>
     </div>
+    </ErrorBoundary>
   );
 }
 
