@@ -9,6 +9,7 @@ import { normalizeMintUrl } from '../../shared/format';
 // Cache of mint connections
 const mintConnections = new Map<string, Mint>();
 const walletConnections = new Map<string, Wallet>();
+const keysetRefreshIntervals = new Map<string, ReturnType<typeof setInterval>>();
 
 // Get or create a mint connection
 export async function getMintConnection(mintUrl: string): Promise<Mint> {
@@ -54,6 +55,10 @@ export async function getWalletForMint(mintUrl: string): Promise<Wallet> {
   console.log('[Nutpay] Mint keysets loaded');
 
   walletConnections.set(normalizedUrl, wallet);
+
+  // Start periodic keyset refresh so the wallet picks up keyset rotations
+  startKeysetRefresh(normalizedUrl);
+
   return wallet;
 }
 
@@ -120,10 +125,46 @@ export async function findMintForPayment(
   return null;
 }
 
+// Start periodic keyset refresh for a mint.
+// Mints can rotate keysets; refreshing every 5 minutes keeps fee schedules current.
+// Safe to call multiple times — subsequent calls are no-ops for already-refreshing mints.
+export function startKeysetRefresh(mintUrl: string): void {
+  const normalizedUrl = normalizeMintUrl(mintUrl);
+  if (keysetRefreshIntervals.has(normalizedUrl)) return;
+
+  const intervalId = setInterval(async () => {
+    const wallet = walletConnections.get(normalizedUrl);
+    if (!wallet) {
+      stopKeysetRefresh(normalizedUrl);
+      return;
+    }
+    try {
+      await wallet.loadMint();
+      console.log(`[Nutpay] Refreshed keysets for ${normalizedUrl}`);
+    } catch (error) {
+      console.warn(`[Nutpay] Failed to refresh keysets for ${normalizedUrl}:`, error);
+    }
+  }, 5 * 60 * 1000);
+
+  keysetRefreshIntervals.set(normalizedUrl, intervalId);
+}
+
+export function stopKeysetRefresh(mintUrl: string): void {
+  const normalizedUrl = normalizeMintUrl(mintUrl);
+  const interval = keysetRefreshIntervals.get(normalizedUrl);
+  if (interval) {
+    clearInterval(interval);
+    keysetRefreshIntervals.delete(normalizedUrl);
+  }
+}
+
 // Clear cached wallet connections.
 // Must be called after seed changes (recovery, onboarding) to ensure
 // wallets are re-created with the new seed and fresh counters.
 export function clearWalletCache(): void {
+  for (const url of keysetRefreshIntervals.keys()) {
+    stopKeysetRefresh(url);
+  }
   walletConnections.clear();
 }
 
