@@ -25,7 +25,7 @@ export function sendToTab(tabId: number, message: ExtensionMessage): void {
 export function postToContent(message: ExtensionMessage): void {
   window.postMessage(
     { source: MESSAGE_EVENTS.TO_CONTENT, payload: message },
-    '*'
+    window.location.origin
   );
 }
 
@@ -33,7 +33,7 @@ export function postToContent(message: ExtensionMessage): void {
 export function postFromContent(message: ExtensionMessage): void {
   window.postMessage(
     { source: MESSAGE_EVENTS.FROM_CONTENT, payload: message },
-    '*'
+    window.location.origin
   );
 }
 
