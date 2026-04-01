@@ -488,9 +488,9 @@ export async function payLightningInvoice(
 }
 
 export async function recoverStuckPendingProofs(): Promise<{ recovered: number; removed: number }> {
-  const pendingProofs = await getPendingSpendProofs();
-  const STUCK_THRESHOLD = 5 * 60 * 1000; // 5 minutes
-  const now = Date.now();
+   const pendingProofs = await getPendingSpendProofs();
+   const STUCK_THRESHOLD = 2 * 60 * 1000; // 2 minutes: Lightning payments complete within seconds; 2 min covers HTLC timeouts while minimising post-crash recovery delay
+   const now = Date.now();
 
   const stuckProofs = pendingProofs.filter(
     (sp) => now - sp.dateReceived > STUCK_THRESHOLD
