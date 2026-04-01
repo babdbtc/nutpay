@@ -11,6 +11,8 @@ const approvalCallbacks = new Map<
   }
 >();
 
+const windowIdToApprovalRequestId = new Map<number, string>();
+
 // Store unlock callbacks for pending payments
 const unlockCallbacks = new Map<
   string,
@@ -20,6 +22,8 @@ const unlockCallbacks = new Map<
     popupId?: number;
   }
 >();
+
+const windowIdToUnlockRequestId = new Map<number, string>();
 
 // Open the approval popup window
 export async function openApprovalPopup(
@@ -62,6 +66,7 @@ export function waitForApproval(
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       approvalCallbacks.delete(requestId);
+      windowIdToApprovalRequestId.delete(popupId);
       reject(new Error('Approval timeout'));
 
       // Close the popup if still open
@@ -72,15 +77,18 @@ export function waitForApproval(
       resolve: (response) => {
         clearTimeout(timeoutId);
         approvalCallbacks.delete(requestId);
+        windowIdToApprovalRequestId.delete(popupId);
         resolve(response);
       },
       reject: (error) => {
         clearTimeout(timeoutId);
         approvalCallbacks.delete(requestId);
+        windowIdToApprovalRequestId.delete(popupId);
         reject(error);
       },
       popupId,
     });
+    windowIdToApprovalRequestId.set(popupId, requestId);
   });
 }
 
@@ -98,11 +106,11 @@ export function handleApprovalResponse(message: ApprovalResponseMessage): void {
 
 // Handle popup window closed without response
 export function handlePopupClosed(windowId: number): void {
-  for (const [requestId, callback] of approvalCallbacks) {
-    if (callback.popupId === windowId) {
+  const requestId = windowIdToApprovalRequestId.get(windowId);
+  if (requestId) {
+    const callback = approvalCallbacks.get(requestId);
+    if (callback) {
       callback.resolve({ approved: false, rememberSite: false });
-      approvalCallbacks.delete(requestId);
-      break;
     }
   }
 }
@@ -146,6 +154,7 @@ export function waitForUnlock(
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       unlockCallbacks.delete(requestId);
+      windowIdToUnlockRequestId.delete(popupId);
       reject(new Error('Unlock timeout'));
 
       // Close the popup if still open
@@ -156,15 +165,18 @@ export function waitForUnlock(
       resolve: () => {
         clearTimeout(timeoutId);
         unlockCallbacks.delete(requestId);
+        windowIdToUnlockRequestId.delete(popupId);
         resolve();
       },
       reject: (error) => {
         clearTimeout(timeoutId);
         unlockCallbacks.delete(requestId);
+        windowIdToUnlockRequestId.delete(popupId);
         reject(error);
       },
       popupId,
     });
+    windowIdToUnlockRequestId.set(popupId, requestId);
   });
 }
 
@@ -178,11 +190,11 @@ export function handleUnlockComplete(requestId: string): void {
 
 // Handle unlock popup closed without unlocking
 export function handleUnlockPopupClosed(windowId: number): void {
-  for (const [requestId, callback] of unlockCallbacks) {
-    if (callback.popupId === windowId) {
+  const requestId = windowIdToUnlockRequestId.get(windowId);
+  if (requestId) {
+    const callback = unlockCallbacks.get(requestId);
+    if (callback) {
       callback.reject(new Error('Unlock cancelled'));
-      unlockCallbacks.delete(requestId);
-      break;
     }
   }
 }
