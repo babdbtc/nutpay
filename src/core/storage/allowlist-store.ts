@@ -28,7 +28,14 @@ export async function setAllowlistEntry(
     allowlist.push(entry);
   }
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.ALLOWLIST]: allowlist });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.ALLOWLIST]: allowlist });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return allowlist;
 }
 
@@ -39,7 +46,14 @@ export async function removeAllowlistEntry(
   const allowlist = await getAllowlist();
   const updated = allowlist.filter((e) => e.origin !== origin);
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.ALLOWLIST]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.ALLOWLIST]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return updated;
 }
 

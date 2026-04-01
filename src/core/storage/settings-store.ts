@@ -21,7 +21,14 @@ export async function updateSettings(
   const current = await getSettings();
   const updated = { ...current, ...updates };
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return updated;
 }
 
@@ -32,7 +39,14 @@ export async function getMints(): Promise<MintConfig[]> {
 
   if (!mints) {
     // Initialize with preset mints
-    await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: PRESET_MINTS });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: PRESET_MINTS });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
     return [...PRESET_MINTS];
   }
 
@@ -52,7 +66,14 @@ export async function addMint(mint: MintConfig): Promise<MintConfig[]> {
   // Store with normalized URL
   const newMint = { ...mint, url: normalizedUrl };
   const updated = [...mints, newMint];
-  await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return updated;
 }
 
@@ -67,7 +88,14 @@ export async function updateMint(
     normalizeMintUrl(m.url) === normalizedUrl ? { ...m, ...updates } : m
   );
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return updated;
 }
 
@@ -77,7 +105,14 @@ export async function removeMint(url: string): Promise<MintConfig[]> {
   const normalizedUrl = normalizeMintUrl(url);
   const updated = mints.filter((m) => normalizeMintUrl(m.url) !== normalizedUrl);
 
-  await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.MINTS]: updated });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+      throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+    }
+    throw error;
+  }
   return updated;
 }
 

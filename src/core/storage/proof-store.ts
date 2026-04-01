@@ -61,7 +61,14 @@ export async function addProofs(
     const updated = [...existing, ...newProofs];
     const encrypted = await encrypt(JSON.stringify(updated));
 
-    await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
   });
 }
 
@@ -74,7 +81,14 @@ export async function removeProofs(proofsToRemove: Proof[]): Promise<void> {
     const updated = existing.filter((sp) => !secretsToRemove.has(sp.proof.secret));
     const encrypted = await encrypt(JSON.stringify(updated));
 
-    await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
   });
 }
 
@@ -92,7 +106,14 @@ export async function markProofsPendingSpend(proofsToMark: Proof[]): Promise<voi
     );
 
     const encrypted = await encrypt(JSON.stringify(updated));
-    await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
   });
 }
 
@@ -123,7 +144,14 @@ export async function finalizePendingSpend(
 
     const updated = [...remaining, ...newProofs];
     const encrypted = await encrypt(JSON.stringify(updated));
-    await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
   });
 }
 
@@ -146,7 +174,14 @@ export async function revertPendingProofs(proofsToRevert: Proof[]): Promise<void
     );
 
     const encrypted = await encrypt(JSON.stringify(updated));
-    await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
   });
 }
 
@@ -182,7 +217,14 @@ export async function selectAndMarkPending(
     );
 
     const encrypted = await encrypt(JSON.stringify(updated));
-    await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.PROOFS]: encrypted });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('QUOTA_BYTES')) {
+        throw new Error('Storage quota exceeded. Remove unused mints or reduce proof count.');
+      }
+      throw error;
+    }
 
     return { proofs: selected, total };
   });
