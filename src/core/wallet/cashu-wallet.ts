@@ -695,8 +695,7 @@ export async function generateSendToken(
 
 // ==================== Send Lightning (Melt) ====================
 
-// Cached melt quotes for payment
-const meltQuoteCache = new Map<string, MeltQuoteResponse>();
+const meltQuoteCache = new Map<string, { quote: MeltQuoteResponse; addedAt: number }>();
 
 // Get a melt quote for a Lightning invoice
 export async function getMeltQuote(
@@ -711,8 +710,12 @@ export async function getMeltQuote(
     const wallet = await getWalletForMint(normalizeMintUrl(mintUrl));
     const meltQuote: MeltQuoteResponse = await wallet.createMeltQuote(invoice);
 
-    // Cache the full quote for later use in meltProofs
-    meltQuoteCache.set(meltQuote.quote, meltQuote);
+    for (const [key, entry] of meltQuoteCache) {
+      if (Date.now() - entry.addedAt > 10 * 60 * 1000) {
+        meltQuoteCache.delete(key);
+      }
+    }
+    meltQuoteCache.set(meltQuote.quote, { quote: meltQuote, addedAt: Date.now() });
 
     return {
       success: true,
@@ -760,8 +763,8 @@ export async function payLightningInvoice(
       };
     }
 
-    // Get the cached melt quote
-    let meltQuote = meltQuoteCache.get(quoteId);
+    const cached = meltQuoteCache.get(quoteId);
+    let meltQuote = cached?.quote;
     if (!meltQuote) {
       // If not cached, create a minimal quote object
       meltQuote = {
