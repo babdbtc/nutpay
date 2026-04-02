@@ -5,27 +5,21 @@ export function useNutpayDetection() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Check if the extension's content script has modified the page
-    // The extension runs at document_start, so by the time React renders,
-    // any injected scripts should be present.
-    const checkExtension = () => {
-      // Method 1: Check for injected script element
-      const injectedScript = document.querySelector('script[src*="inject.js"]');
-      if (injectedScript) {
-        setIsDetected(true);
-        setIsChecking(false);
-        return;
-      }
+    // Check for the global flag set by Nutpay's inject.ts
+    if ((window as any).__nutpay_installed) {
+      setIsDetected(true);
+      setIsChecking(false);
+      return;
+    }
 
-      // Method 2: Check after a short delay (extension may still be loading)
-      setTimeout(() => {
-        const scriptCheck = document.querySelector('script[src*="inject.js"]');
-        setIsDetected(!!scriptCheck);
-        setIsChecking(false);
-      }, 1000);
-    };
+    // Retry once after 500ms — the extension content script runs at
+    // document_start but there may be a small delay before inject.ts executes
+    const timer = setTimeout(() => {
+      setIsDetected(!!(window as any).__nutpay_installed);
+      setIsChecking(false);
+    }, 500);
 
-    checkExtension();
+    return () => clearTimeout(timer);
   }, []);
 
   return { isDetected, isChecking };
