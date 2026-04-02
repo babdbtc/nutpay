@@ -1,0 +1,6 @@
+      } else if (res.status === 402) {
+        const outcome = paymentOutcomeRef.current;
+        if (outcome !== null && outcome.type === 'denied') {
+          setPaymentState('error');
+          setPaymentError('Payment was declined.');
+        } else if (outcome !== null && outcome.type === 'failed') {
