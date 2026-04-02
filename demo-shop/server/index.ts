@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { corsMiddleware } from './middleware/cors.js';
 import healthRouter from './routes/health.js';
+import freeTokenRouter from './routes/free-token.js';
 import { initializeCashu } from './services/cashu.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +19,7 @@ app.use(express.json());
 
 // API Routes
 app.use(healthRouter);
+app.use(freeTokenRouter);
 
 // Static files (built React SPA)
 const clientDistPath = path.join(__dirname, '../dist/client');
