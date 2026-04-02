@@ -14,7 +14,7 @@ const features = [
   {
     to: '/free-tokens',
     title: 'FREE TOKENS',
-    description: 'Claim free Cashu tokens to try out the shop. Nutpay auto-detects and claims them.',
+    description: 'Claim free Cashu tokens to try out the shop. Your Cashu wallet auto-detects and claims them.',
   },
 ] as const;
 

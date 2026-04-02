@@ -55,7 +55,7 @@ export default function FreeTokens() {
         marginTop: 'var(--space-6)',
         maxWidth: '640px',
       }}>
-        Get free Cashu tokens to try out the shop. Nutpay will automatically detect and claim tokens on this page.
+        Get free Cashu tokens to try out the shop. Your Cashu wallet will automatically detect and offer to claim tokens displayed on this page.
       </p>
 
       <div style={{ marginTop: 'var(--space-12)' }}>
@@ -83,7 +83,7 @@ export default function FreeTokens() {
         </button>
       </div>
 
-      {/* CRITICAL: token rendered as direct text content in visible div — Nutpay ecash-scanner regex requires this */}
+      {/* CRITICAL: token rendered as direct text content in visible div — Cashu wallet ecash scanners detect tokens matching cashu[AB]... pattern */}
       {token && (
         <div style={{ marginTop: 'var(--space-12)' }}>
           <div style={{
@@ -160,7 +160,7 @@ export default function FreeTokens() {
         lineHeight: 1.8,
         maxWidth: '640px',
       }}>
-        If you have Nutpay installed, it will auto-detect this token. Otherwise, copy it and paste into your wallet.
+        If you have a Cashu wallet extension installed, it will auto-detect this token. Otherwise, copy and paste it into any Cashu wallet.
       </div>
     </div>
   );
