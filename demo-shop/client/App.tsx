@@ -5,10 +5,7 @@ import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Articles from './pages/Articles';
 import ArticleReader from './pages/ArticleReader';
-
-function Placeholder({ name }: { name: string }) {
-  return <div style={{ padding: '64px 0', color: 'var(--text-secondary)' }}>[{name} — Coming Soon]</div>;
-}
+import FreeTokens from './pages/FreeTokens';
 
 export default function App() {
   return (
@@ -19,7 +16,7 @@ export default function App() {
         <Route path="/products/:id" element={<ProductDetail />} />
         <Route path="/articles" element={<Articles />} />
         <Route path="/articles/:id" element={<ArticleReader />} />
-        <Route path="/free-tokens" element={<Placeholder name="Free Tokens" />} />
+        <Route path="/free-tokens" element={<FreeTokens />} />
       </Routes>
     </Layout>
   );
