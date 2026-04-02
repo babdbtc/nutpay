@@ -105,7 +105,6 @@ export default function ArticleReader() {
       paddingBottom: 'var(--space-16)',
       maxWidth: '680px',
     }}>
-      {/* Back link */}
       <Link
         to="/articles"
         style={{
@@ -123,7 +122,6 @@ export default function ArticleReader() {
         &larr; ARTICLES
       </Link>
 
-      {/* Meta */}
       <div style={{
         fontFamily: 'var(--font-mono)',
         fontSize: 'var(--text-xs)',
@@ -135,7 +133,6 @@ export default function ArticleReader() {
         {article.author} &mdash; {date}
       </div>
 
-      {/* Title */}
       <h1 style={{
         fontFamily: 'var(--font-heading)',
         fontSize: 'var(--text-3xl)',
@@ -147,7 +144,6 @@ export default function ArticleReader() {
         {article.title}
       </h1>
 
-      {/* Teaser — always visible */}
       <p style={{
         fontFamily: 'var(--font-body)',
         fontSize: 'var(--text-lg)',
@@ -158,7 +154,6 @@ export default function ArticleReader() {
         {article.teaser}
       </p>
 
-      {/* Unlock section */}
       {state !== 'unlocked' && (
         <div style={{
           borderTop: '1px solid var(--border-subtle)',
@@ -240,7 +235,6 @@ export default function ArticleReader() {
         </div>
       )}
 
-      {/* Full article content */}
       {state === 'unlocked' && articleContent && (
         <div style={{
           borderTop: '1px solid var(--border-subtle)',
