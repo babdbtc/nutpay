@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { corsMiddleware } from './middleware/cors.js';
 import healthRouter from './routes/health.js';
+import { initializeCashu } from './services/cashu.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +34,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Demo shop server running on http://localhost:${PORT}`);
+  initializeCashu().catch(err => console.warn('Mint initialization failed:', err.message));
 });
 
 export default app;
