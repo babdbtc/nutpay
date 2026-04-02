@@ -91,13 +91,13 @@ export default function ArticleReader() {
           setError('Payment was declined.');
         } else if (outcome !== null && outcome.type === 'failed') {
           setState('error');
-          setError(outcome.error || 'Payment failed. Check your Nutpay wallet.');
+          setError(outcome.error || 'Payment failed. Check your Cashu wallet balance.');
         } else if ((window as any).__nutpay_installed) {
           setState('error');
-          setError('Payment failed. Check your Nutpay wallet.');
+          setError('Payment failed. Check your Cashu wallet balance.');
         } else {
           setState('error');
-          setError('Nutpay extension not detected. Install it to make payments.');
+          setError('No Cashu wallet detected. Install a browser wallet to make payments.');
         }
       } else {
         const err = await res.json().catch(() => ({ detail: 'Payment failed' }));
@@ -247,7 +247,7 @@ export default function ArticleReader() {
               color: 'var(--text-secondary)',
               letterSpacing: '0.05em',
             }}>
-              Approve payment in Nutpay...
+              Waiting for 402 payment confirmation...
             </div>
           )}
 
