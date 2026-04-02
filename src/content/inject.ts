@@ -80,6 +80,9 @@ async function retryWithPayment(requestId: string, token: string): Promise<void>
   }
 }
 
+// Signal to pages that Nutpay's fetch interceptor is active
+(window as any).__nutpay_installed = true;
+
 // Store original fetch before overriding
 const originalFetch = window.fetch;
 
