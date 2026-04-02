@@ -23,9 +23,9 @@ export default function Home() {
     <div style={{ paddingBottom: 'var(--space-24)' }}>
       <div style={{ paddingTop: 'var(--space-16)' }}>
         <h1 style={{
-          fontFamily: 'var(--font-heading)',
+          fontFamily: 'var(--font-display)',
           fontSize: 'var(--text-display-size)',
-          fontWeight: 300,
+          fontWeight: 400,
           color: 'var(--text-display)',
           lineHeight: 1.1,
           letterSpacing: '-0.02em',
