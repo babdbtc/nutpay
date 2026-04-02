@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import { corsMiddleware } from './middleware/cors.js';
 import healthRouter from './routes/health.js';
 import freeTokenRouter from './routes/free-token.js';
+import productsRouter from './routes/products.js';
+import articlesRouter from './routes/articles.js';
 import { initializeCashu } from './services/cashu.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +22,8 @@ app.use(express.json());
 // API Routes
 app.use(healthRouter);
 app.use(freeTokenRouter);
+app.use(productsRouter);
+app.use(articlesRouter);
 
 // Static files (built React SPA)
 const clientDistPath = path.join(__dirname, '../dist/client');
