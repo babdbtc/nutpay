@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   root: './client',
+  publicDir: '../public',
   build: {
     outDir: '../dist/client',
     emptyOutDir: true,
