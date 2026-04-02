@@ -29,7 +29,7 @@ export default function ProductDetail() {
         return res.json();
       })
       .then((data) => {
-        const found = data.products.find((p: Product) => p.id === id);
+        const found = data.products.find((p: Product) => String(p.id) === id);
         if (found) {
           setProduct(found);
         } else {
