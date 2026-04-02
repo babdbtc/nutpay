@@ -26,7 +26,7 @@ app.use(productsRouter);
 app.use(articlesRouter);
 
 // Static files (built React SPA)
-const clientDistPath = path.join(__dirname, '../dist/client');
+const clientDistPath = path.join(__dirname, '../client');
 app.use(express.static(clientDistPath));
 
 // SPA fallback — serve index.html for non-API routes
