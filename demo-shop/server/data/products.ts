@@ -17,7 +17,7 @@ export const products: Product[] = [
     price: 4,
     unit: 'sat',
     category: 'wallpapers',
-    previewImage: '/assets/wallpaper-preview.svg',
+    previewImage: '/assets/wallpaper-preview.png',
     fileType: 'SVG Pack',
   },
   {
@@ -27,7 +27,7 @@ export const products: Product[] = [
     price: 2,
     unit: 'sat',
     category: 'icons',
-    previewImage: '/assets/icons-preview.svg',
+    previewImage: '/assets/icons-preview.png',
     fileType: 'SVG Bundle',
   },
   {
@@ -37,7 +37,7 @@ export const products: Product[] = [
     price: 1,
     unit: 'sat',
     category: 'code',
-    previewImage: '/assets/code-preview.svg',
+    previewImage: '/assets/code-preview.png',
     fileType: 'TypeScript',
   },
   {
@@ -47,7 +47,7 @@ export const products: Product[] = [
     price: 8,
     unit: 'sat',
     category: 'fonts',
-    previewImage: '/assets/font-preview.svg',
+    previewImage: '/assets/font-preview.png',
     fileType: 'OTF Font',
   },
 ];
