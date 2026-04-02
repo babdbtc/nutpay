@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 
 interface ArticleTeaser {
@@ -20,6 +20,14 @@ export default function ArticleReader() {
   const [state, setState] = useState<ReaderState>('locked');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const paymentOutcomeRef = useRef<{ type: string; error?: string; reason?: string } | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) cleanupRef.current();
+    };
+  }, []);
 
   useEffect(() => {
     fetch('/api/articles')
@@ -44,20 +52,61 @@ export default function ArticleReader() {
 
   const handleUnlock = async () => {
     setState('unlocking');
+    setError('');
+    paymentOutcomeRef.current = null;
+
+    const onPending = () => setState('awaiting');
+    const onFailed = (e: Event) => {
+      paymentOutcomeRef.current = { type: 'failed', error: (e as CustomEvent).detail.error };
+    };
+    const onDenied = (e: Event) => {
+      paymentOutcomeRef.current = { type: 'denied', reason: (e as CustomEvent).detail.reason };
+    };
+
+    window.addEventListener('nutpay:payment-pending', onPending, { once: true });
+    window.addEventListener('nutpay:payment-failed', onFailed, { once: true });
+    window.addEventListener('nutpay:payment-denied', onDenied, { once: true });
+
+    const cleanup = () => {
+      window.removeEventListener('nutpay:payment-pending', onPending);
+      window.removeEventListener('nutpay:payment-failed', onFailed);
+      window.removeEventListener('nutpay:payment-denied', onDenied);
+    };
+    cleanupRef.current = cleanup;
+
     try {
       const res = await fetch(`/api/articles/${id}/content`);
-      if (res.status === 402) {
-        setState('awaiting');
-      } else if (res.ok) {
+
+      cleanup();
+      cleanupRef.current = null;
+
+      if (res.ok) {
         const data = await res.json();
         setState('unlocked');
         setArticleContent(data.article.content);
+      } else if (res.status === 402) {
+        const outcome = paymentOutcomeRef.current;
+        if (outcome !== null && outcome.type === 'denied') {
+          setState('error');
+          setError('Payment was declined.');
+        } else if (outcome !== null && outcome.type === 'failed') {
+          setState('error');
+          setError(outcome.error || 'Payment failed. Check your Nutpay wallet.');
+        } else if ((window as any).__nutpay_installed) {
+          setState('error');
+          setError('Payment failed. Check your Nutpay wallet.');
+        } else {
+          setState('error');
+          setError('Nutpay extension not detected. Install it to make payments.');
+        }
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ detail: 'Payment failed' }));
         setState('error');
         setError(err.detail || 'Payment failed');
       }
     } catch (e) {
+      cleanup();
+      cleanupRef.current = null;
       setState('error');
       setError(e instanceof Error ? e.message : 'Request failed');
     }
