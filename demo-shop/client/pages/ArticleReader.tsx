@@ -28,7 +28,7 @@ export default function ArticleReader() {
         return res.json();
       })
       .then((data) => {
-        const found = data.articles.find((a: ArticleTeaser) => a.id === id);
+        const found = data.articles.find((a: ArticleTeaser) => String(a.id) === id);
         if (found) {
           setArticle(found);
         } else {
