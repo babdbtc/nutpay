@@ -41,11 +41,27 @@ window.addEventListener('message', (event) => {
   if (message.type === 'PAYMENT_TOKEN') {
     const pending = pendingRequests.get(message.requestId);
     if (pending) {
+      window.dispatchEvent(new CustomEvent('nutpay:payment-success', {
+        detail: { requestId: message.requestId, url: pending.originalRequest.url }
+      }));
       retryWithPayment(message.requestId, message.token);
     }
-  } else if (message.type === 'PAYMENT_DENIED' || message.type === 'PAYMENT_FAILED') {
+  } else if (message.type === 'PAYMENT_DENIED') {
     const pending = pendingRequests.get(message.requestId);
     if (pending) {
+      window.dispatchEvent(new CustomEvent('nutpay:payment-denied', {
+        detail: { requestId: message.requestId, reason: message.reason, url: pending.originalRequest.url }
+      }));
+      pendingRequests.delete(message.requestId);
+      // Return the original 402 response instead of throwing an error
+      pending.resolve(pending.originalResponse);
+    }
+  } else if (message.type === 'PAYMENT_FAILED') {
+    const pending = pendingRequests.get(message.requestId);
+    if (pending) {
+      window.dispatchEvent(new CustomEvent('nutpay:payment-failed', {
+        detail: { requestId: message.requestId, error: message.error, url: pending.originalRequest.url }
+      }));
       pendingRequests.delete(message.requestId);
       // Return the original 402 response instead of throwing an error
       pending.resolve(pending.originalResponse);
@@ -166,15 +182,23 @@ window.fetch = async function (
       origin: window.location.origin,
     });
 
+    window.dispatchEvent(new CustomEvent('nutpay:payment-pending', {
+      detail: { requestId, url }
+    }));
+
     // Timeout: return original 402 response if payment takes too long
     setTimeout(() => {
       if (pendingRequests.has(requestId)) {
         pendingRequests.delete(requestId);
+        window.dispatchEvent(new CustomEvent('nutpay:payment-failed', {
+          detail: { requestId, error: 'Payment timed out', url }
+        }));
         resolve(response);
       }
     }, PAYMENT_TIMEOUT_MS);
   });
 };
 
-// Signal that injection is complete
 console.log('[Nutpay] NUT-24 payment interceptor initialized');
+
+export {};
