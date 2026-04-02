@@ -34,7 +34,6 @@ export default function FreeTokens() {
   return (
     <div style={{ paddingBottom: 'var(--space-24)' }}>
 
-      {/* Hero */}
       <div style={{ paddingTop: 'var(--space-16)' }}>
         <h1 style={{
           fontFamily: 'var(--font-display)',
@@ -48,7 +47,6 @@ export default function FreeTokens() {
         </h1>
       </div>
 
-      {/* Description */}
       <p style={{
         fontFamily: 'var(--font-body)',
         fontSize: 'var(--text-lg)',
@@ -60,7 +58,6 @@ export default function FreeTokens() {
         Get free Cashu tokens to try out the shop. Nutpay will automatically detect and claim tokens on this page.
       </p>
 
-      {/* Claim button */}
       <div style={{ marginTop: 'var(--space-12)' }}>
         <button
           onClick={handleClaim}
@@ -86,7 +83,7 @@ export default function FreeTokens() {
         </button>
       </div>
 
-      {/* Token display — CRITICAL: token as direct text content in a visible div for ecash-scanner */}
+      {/* CRITICAL: token rendered as direct text content in visible div — Nutpay ecash-scanner regex requires this */}
       {token && (
         <div style={{ marginTop: 'var(--space-12)' }}>
           <div style={{
@@ -115,7 +112,6 @@ export default function FreeTokens() {
         </div>
       )}
 
-      {/* Exhausted state */}
       {state === 'exhausted' && (
         <div style={{
           marginTop: 'var(--space-12)',
@@ -129,7 +125,6 @@ export default function FreeTokens() {
         </div>
       )}
 
-      {/* Remaining count */}
       {remaining !== null && state !== 'exhausted' && (
         <div style={{
           marginTop: 'var(--space-6)',
@@ -143,7 +138,6 @@ export default function FreeTokens() {
         </div>
       )}
 
-      {/* Server message */}
       {message && (
         <div style={{
           marginTop: 'var(--space-4)',
@@ -156,7 +150,6 @@ export default function FreeTokens() {
         </div>
       )}
 
-      {/* Instructions */}
       <div style={{
         marginTop: 'var(--space-24)',
         fontFamily: 'var(--font-mono)',
