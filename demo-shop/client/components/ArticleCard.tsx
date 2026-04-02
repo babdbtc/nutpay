@@ -42,7 +42,7 @@ export default function ArticleCard({ id, title, author, teaser, price, unit, pu
       <h2 style={{
         fontFamily: 'var(--font-heading)',
         fontSize: 'var(--text-xl)',
-        fontWeight: 500,
+        fontWeight: 400,
         color: 'var(--text-primary)',
         lineHeight: 1.3,
         marginBottom: 'var(--space-3)',
@@ -65,7 +65,7 @@ export default function ArticleCard({ id, title, author, teaser, price, unit, pu
         fontSize: 'var(--text-xs)',
         color: 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
-        padding: '4px 10px',
+        padding: 'var(--space-1) var(--space-3)',
         borderRadius: '999px',
         letterSpacing: '0.05em',
         textTransform: 'uppercase',
