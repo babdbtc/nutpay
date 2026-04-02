@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 
 interface Product {
@@ -21,6 +21,14 @@ export default function ProductDetail() {
   const [paymentState, setPaymentState] = useState<PaymentState>('idle');
   const [paymentError, setPaymentError] = useState<string>('');
   const [downloadUrl, setDownloadUrl] = useState<string>('');
+  const paymentOutcomeRef = useRef<{ type: string; error?: string; reason?: string } | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) cleanupRef.current();
+    };
+  }, []);
 
   useEffect(() => {
     fetch('/api/products')
@@ -45,20 +53,60 @@ export default function ProductDetail() {
 
   const handlePay = async () => {
     setPaymentState('paying');
+    setPaymentError('');
+    paymentOutcomeRef.current = null;
+
+    const onPending = () => setPaymentState('awaiting');
+    const onFailed = (e: Event) => {
+      paymentOutcomeRef.current = { type: 'failed', error: (e as CustomEvent).detail.error };
+    };
+    const onDenied = (e: Event) => {
+      paymentOutcomeRef.current = { type: 'denied', reason: (e as CustomEvent).detail.reason };
+    };
+
+    window.addEventListener('nutpay:payment-pending', onPending, { once: true });
+    window.addEventListener('nutpay:payment-failed', onFailed, { once: true });
+    window.addEventListener('nutpay:payment-denied', onDenied, { once: true });
+
+    const cleanup = () => {
+      window.removeEventListener('nutpay:payment-pending', onPending);
+      window.removeEventListener('nutpay:payment-failed', onFailed);
+      window.removeEventListener('nutpay:payment-denied', onDenied);
+    };
+    cleanupRef.current = cleanup;
+
     try {
       const res = await fetch(`/api/products/${id}`);
-      if (res.status === 402) {
-        setPaymentState('awaiting');
-      } else if (res.ok) {
+      cleanup();
+      cleanupRef.current = null;
+
+      if (res.ok) {
         const data = await res.json();
         setPaymentState('success');
         setDownloadUrl(data.downloadUrl);
+      } else if (res.status === 402) {
+        const outcome = paymentOutcomeRef.current;
+        if (outcome !== null && outcome.type === 'denied') {
+          setPaymentState('error');
+          setPaymentError('Payment was declined.');
+        } else if (outcome !== null && outcome.type === 'failed') {
+          setPaymentState('error');
+          setPaymentError(outcome.error || 'Payment failed. Check your Nutpay wallet.');
+        } else if ((window as any).__nutpay_installed) {
+          setPaymentState('error');
+          setPaymentError('Payment failed. Check your Nutpay wallet.');
+        } else {
+          setPaymentState('error');
+          setPaymentError('Nutpay extension not detected. Install it to make payments.');
+        }
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ detail: 'Payment failed' }));
         setPaymentState('error');
         setPaymentError(err.detail || 'Payment failed');
       }
     } catch {
+      cleanup();
+      cleanupRef.current = null;
       setPaymentState('error');
       setPaymentError('Network error');
     }
