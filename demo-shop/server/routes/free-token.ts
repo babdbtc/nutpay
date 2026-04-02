@@ -10,7 +10,7 @@ router.get('/api/free-token', (req, res) => {
     tokenIndex++;
     res.json({
       token,
-      message: "Here's your free Cashu token! Paste it into your wallet or let Nutpay auto-claim it.",
+      message: "Here's your free Cashu token! Your wallet extension will auto-claim it, or copy and paste it into any Cashu wallet.",
       remaining: freeTokens.length - tokenIndex,
     });
   } else {
