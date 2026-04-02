@@ -1,4 +1,5 @@
 import React from 'react';
+import Navigation from './Navigation';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +13,7 @@ export default function Layout({ children }: LayoutProps) {
       padding: '0 var(--space-6)',
       minHeight: '100vh',
     }}>
+      <Navigation />
       {children}
     </div>
   );
