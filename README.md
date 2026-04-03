@@ -2,7 +2,7 @@
 
 A Cashu ecash wallet for your browser — with automatic HTTP 402 micropayments.
 
-<video src="assets/nutpay-demo.mp4" autoplay loop muted playsinline></video>
+https://github.com/user-attachments/assets/25010ae3-b4ab-41c7-b76d-5ebdc06cad83
 
 ## Wallet Features
 
