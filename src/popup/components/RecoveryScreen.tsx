@@ -114,6 +114,7 @@ export function RecoveryScreen({ onRecovered, onBack }: RecoveryScreenProps) {
               type="button"
               onClick={() => recovery.setShowPassword(!recovery.showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+              aria-label={recovery.showPassword ? 'Hide password' : 'Show password'}
             >
               {recovery.showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import type { MintConfig } from '../shared/types';
 import { PRESET_MINTS } from '../shared/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +28,7 @@ export function MintManager() {
     try {
       new URL(newMintUrl);
     } catch {
-      alert('Invalid URL');
+      toast.error('Invalid URL');
       return;
     }
     const newMint: MintConfig = {
@@ -67,6 +68,7 @@ export function MintManager() {
               <Switch
                 checked={mint.enabled}
                 onCheckedChange={(v) => toggleMint(mint.url, v)}
+                aria-label={`Enable ${mint.name}`}
               />
               {!PRESET_MINTS.some((p) => p.url === mint.url) && (
                 <Button
@@ -88,6 +90,7 @@ export function MintManager() {
             onChange={(e) => setNewMintUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMint(); } }}
             className="bg-popover border-input flex-1"
+            aria-label="Mint URL"
           />
           <Button
             className="bg-green-500 hover:bg-green-600"
