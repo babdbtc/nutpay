@@ -145,6 +145,10 @@ export interface AllowlistEntry {
   maxPerDay: number;
   dailySpent: number;
   lastResetDate: string;
+  maxPerMonth: number;          // monthly spending cap (default: 10000 sats)
+  monthlySpent: number;         // tracking counter
+  lastMonthlyReset: string;     // "2026-04" format — calendar month
+  preferredMint: string | null; // mint URL to prefer for this site, null = no preference
 }
 
 // Available themes
