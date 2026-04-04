@@ -12,6 +12,8 @@ import {
   recordPayment,
   getAllowlistEntry,
   isMonthlyLimitExceeded,
+  setAllowlistEntry,
+  createDefaultAllowlistEntry,
   withDefaults,
 } from '../core/storage/allowlist-store';
 import { calculateBudgetStatus } from './budget-alerts';
@@ -324,6 +326,19 @@ export async function handlePaymentRequired(
 
     if (approval.approveTab === true) {
       await createTabSession(tabId, origin);
+    }
+
+    if (approval.rememberSite === true) {
+      const existingEntry = await getAllowlistEntry(origin);
+
+      await setAllowlistEntry(
+        existingEntry
+          ? {
+              ...withDefaults(existingEntry),
+              autoApprove: true,
+            }
+          : createDefaultAllowlistEntry(origin, true)
+      );
     }
 
     // Process the payment

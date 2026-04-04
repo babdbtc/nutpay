@@ -10,6 +10,19 @@ vi.mock('../core/storage/allowlist-store', () => ({
   isAutoApproved: vi.fn(),
   recordPayment: vi.fn(),
   getAllowlistEntry: vi.fn(),
+  setAllowlistEntry: vi.fn(),
+  createDefaultAllowlistEntry: vi.fn((origin: string, autoApprove = false) => ({
+    origin,
+    autoApprove,
+    maxPerPayment: 100,
+    maxPerDay: 1000,
+    dailySpent: 0,
+    lastResetDate: '2026-04-04',
+    maxPerMonth: 10000,
+    monthlySpent: 0,
+    lastMonthlyReset: '2026-04',
+    preferredMint: null,
+  })),
   isMonthlyLimitExceeded: vi.fn(async () => ({ exceeded: false })),
   withDefaults: vi.fn(<T>(entry: T) => entry),
 }));
@@ -55,7 +68,14 @@ vi.mock('./velocity-limiter', () => ({
 }));
 
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
-import { isAutoApproved, recordPayment, getAllowlistEntry, isMonthlyLimitExceeded } from '../core/storage/allowlist-store';
+import {
+  isAutoApproved,
+  recordPayment,
+  getAllowlistEntry,
+  setAllowlistEntry,
+  createDefaultAllowlistEntry,
+  isMonthlyLimitExceeded,
+} from '../core/storage/allowlist-store';
 import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
@@ -99,6 +119,7 @@ function setupBaselineSuccess() {
   vi.mocked(waitForApproval).mockResolvedValue({ approved: true, rememberSite: false });
   vi.mocked(createPaymentToken).mockResolvedValue({ success: true, token: 'cashuBtesttoken' });
   vi.mocked(recordPayment).mockResolvedValue(undefined);
+  vi.mocked(setAllowlistEntry).mockResolvedValue([]);
   vi.mocked(isTabSessionValid).mockResolvedValue(false);
   vi.mocked(checkVelocityLimit).mockReturnValue({ allowed: true });
   vi.mocked(recordPaymentTimestamp).mockReturnValue(undefined);
@@ -246,6 +267,26 @@ describe('handlePaymentRequired – policy integration (Tasks 6 & 7)', () => {
 
     expect(result.type).toBe('PAYMENT_DENIED');
     expect((result as { type: string; reason: string }).reason).toMatch(/rate limit/i);
+  });
+
+  it('persists the site to the allowlist when approval is remembered', async () => {
+    setupBaselineSuccess();
+    vi.mocked(waitForApproval).mockResolvedValue({
+      approved: true,
+      rememberSite: true,
+      approveTab: false,
+    });
+
+    const result = await handlePaymentRequired(mockMessage, 1);
+
+    expect(result.type).toBe('PAYMENT_TOKEN');
+    expect(createDefaultAllowlistEntry).toHaveBeenCalledWith(ORIGIN, true);
+    expect(setAllowlistEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: ORIGIN,
+        autoApprove: true,
+      })
+    );
   });
 
   it('returns PAYMENT_DENIED when payment would exceed monthly limit', async () => {
