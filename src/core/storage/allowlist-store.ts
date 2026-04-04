@@ -90,7 +90,47 @@ export async function isAutoApproved(
   return entry.dailySpent + amount <= entry.maxPerDay;
 }
 
-// Record a payment for an origin (updates daily spent)
+// Check if monthly spending limit is exceeded
+export async function isMonthlyLimitExceeded(
+  origin: string,
+  amount: number
+): Promise<{ exceeded: boolean; reason?: string }> {
+  const entry = await getAllowlistEntry(origin);
+
+  if (!entry) {
+    return { exceeded: false };
+  }
+
+  const entryWithDefaults = withDefaults(entry);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  // Lazy reset: if month has changed, reset counter
+  if (entryWithDefaults.lastMonthlyReset !== currentMonth) {
+    await setAllowlistEntry({
+      ...entryWithDefaults,
+      monthlySpent: 0,
+      lastMonthlyReset: currentMonth,
+    });
+    // After reset, check new payment against limit
+    return {
+      exceeded: amount > entryWithDefaults.maxPerMonth,
+      reason:
+        amount > entryWithDefaults.maxPerMonth
+          ? `Payment of ${amount} sats exceeds monthly limit of ${entryWithDefaults.maxPerMonth} sats`
+          : undefined,
+    };
+  }
+
+  const wouldExceed = entryWithDefaults.monthlySpent + amount > entryWithDefaults.maxPerMonth;
+  return {
+    exceeded: wouldExceed,
+    reason: wouldExceed
+      ? `Payment of ${amount} sats would exceed monthly limit (${entryWithDefaults.monthlySpent}/${entryWithDefaults.maxPerMonth} sats already spent)`
+      : undefined,
+  };
+}
+
+// Record a payment for an origin (updates daily and monthly spent)
 export async function recordPayment(
   origin: string,
   amount: number
@@ -101,13 +141,28 @@ export async function recordPayment(
     return;
   }
 
+  const entryWithDefaults = withDefaults(entry);
   const today = new Date().toISOString().split('T')[0];
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  // Handle daily reset
+  const newDailySpent =
+    entryWithDefaults.lastResetDate === today
+      ? entryWithDefaults.dailySpent + amount
+      : amount;
+
+  // Handle monthly reset
+  const newMonthlySpent =
+    entryWithDefaults.lastMonthlyReset === currentMonth
+      ? entryWithDefaults.monthlySpent + amount
+      : amount;
 
   await setAllowlistEntry({
-    ...entry,
-    dailySpent:
-      entry.lastResetDate === today ? entry.dailySpent + amount : amount,
+    ...entryWithDefaults,
+    dailySpent: newDailySpent,
     lastResetDate: today,
+    monthlySpent: newMonthlySpent,
+    lastMonthlyReset: currentMonth,
   });
 }
 
@@ -123,5 +178,20 @@ export function createDefaultAllowlistEntry(
     maxPerDay: 1000,    // 1000 sats default
     dailySpent: 0,
     lastResetDate: new Date().toISOString().split('T')[0],
+    maxPerMonth: 10000,
+    monthlySpent: 0,
+    lastMonthlyReset: new Date().toISOString().slice(0, 7),
+    preferredMint: null,
+  };
+}
+
+// Apply defaults to an allowlist entry for migration safety
+export function withDefaults(entry: AllowlistEntry): AllowlistEntry {
+  return {
+    ...entry,
+    maxPerMonth: entry.maxPerMonth ?? 10000,
+    monthlySpent: entry.monthlySpent ?? 0,
+    lastMonthlyReset: entry.lastMonthlyReset ?? new Date().toISOString().slice(0, 7),
+    preferredMint: entry.preferredMint ?? null,
   };
 }
