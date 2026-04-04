@@ -7,7 +7,12 @@ import type {
   XCashuPaymentRequest,
 } from '../shared/types';
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
-import { isAutoApproved, recordPayment, getAllowlistEntry, withDefaults } from '../core/storage/allowlist-store';
+import {
+  isAutoApproved,
+  recordPayment,
+  getAllowlistEntry,
+  isMonthlyLimitExceeded,
+} from '../core/storage/allowlist-store';
 import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval, openUnlockPopup, waitForUnlock } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
@@ -15,6 +20,8 @@ import { getMints } from '../core/storage/settings-store';
 import { mintSupportsNut } from '../core/wallet/mint-manager';
 import { normalizeMintUrl } from '../shared/format';
 import { getSecurityConfig, isSessionValid, isAccountLocked } from '../core/storage/security-store';
+import { checkVelocityLimit, recordPaymentTimestamp } from './velocity-limiter';
+import { createTabSession, isTabSessionValid } from '../core/storage/tab-session-store';
 
 // Store pending payments
 const pendingPayments = new Map<string, PendingPayment>();
@@ -126,6 +133,14 @@ async function checkSpendingLimits(
     };
   }
 
+  const monthlyLimit = await isMonthlyLimitExceeded(origin, amount);
+  if (monthlyLimit.exceeded) {
+    return {
+      allowed: false,
+      reason: monthlyLimit.reason || 'Monthly spending limit exceeded',
+    };
+  }
+
   return { allowed: true };
 }
 
@@ -187,7 +202,9 @@ export async function handlePaymentRequired(
 
   // Get preferred mint from allowlist entry if available
   const allowlistEntry = await getAllowlistEntry(origin);
-  const preferredMint = allowlistEntry ? withDefaults(allowlistEntry).preferredMint : null;
+  const preferredMint = allowlistEntry
+    ? (allowlistEntry as { preferredMint?: string | null }).preferredMint ?? null
+    : null;
 
   // Check if we can pay before showing popup
   const feasibility = await checkPaymentFeasibility(paymentRequest, preferredMint);
@@ -234,6 +251,15 @@ export async function handlePaymentRequired(
     }
   }
 
+  const velocityLimit = checkVelocityLimit(origin);
+  if (!velocityLimit.allowed) {
+    return {
+      type: 'PAYMENT_DENIED',
+      requestId,
+      reason: velocityLimit.reason || 'Payment velocity limit exceeded',
+    };
+  }
+
   // Check spending limits
   const limitCheck = await checkSpendingLimits(origin, paymentRequest.amount);
   if (!limitCheck.allowed) {
@@ -256,6 +282,11 @@ export async function handlePaymentRequired(
   pendingPayments.set(requestId, pending);
 
   try {
+    const tabSessionValid = await isTabSessionValid(tabId, origin);
+    if (tabSessionValid) {
+      return await processPayment(pending);
+    }
+
     // Check if auto-approved
     const autoApproved = await isAutoApproved(origin, paymentRequest.amount);
 
@@ -272,7 +303,11 @@ export async function handlePaymentRequired(
     );
 
     // Wait for user approval
-    const approval = await waitForApproval(requestId, popupId);
+    const approval = await waitForApproval(requestId, popupId) as {
+      approved: boolean;
+      rememberSite: boolean;
+      approveTab?: boolean;
+    };
 
     if (!approval.approved) {
       pendingPayments.delete(requestId);
@@ -281,6 +316,10 @@ export async function handlePaymentRequired(
         requestId,
         reason: 'User denied payment',
       };
+    }
+
+    if (approval.approveTab === true) {
+      await createTabSession(tabId, origin);
     }
 
     // Process the payment
@@ -309,6 +348,7 @@ async function processPayment(
     if (result.success && result.token) {
       // Record the payment for allowlist tracking
       await recordPayment(origin, paymentRequest.amount);
+      recordPaymentTimestamp(origin);
 
       return {
         type: 'PAYMENT_TOKEN',
