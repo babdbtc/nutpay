@@ -34,6 +34,7 @@ export type MessageType =
   | 'ADD_TO_ALLOWLIST'
   | 'REMOVE_FROM_ALLOWLIST'
   | 'UPDATE_ALLOWLIST_ENTRY'
+  | 'GET_ALLOWLIST_ENTRY'
   | 'SETTINGS_UPDATED'
   // Lightning receive
   | 'CREATE_MINT_QUOTE'
@@ -73,6 +74,7 @@ export type MessageType =
   | 'REQUEST_LNURL_INVOICE'
   // Spending analytics
   | 'GET_SPENDING_BY_DOMAIN'
+  | 'GET_SPENDING_DASHBOARD'
   // Side panel
   | 'OPEN_SIDE_PANEL'
   // Token decoding
@@ -80,7 +82,9 @@ export type MessageType =
   // Open popup (e.g. to unlock for claiming)
   | 'OPEN_POPUP'
   // Cross-sync: notify the other UI that tokens were claimed
-  | 'PAGE_TOKENS_CLAIMED';
+  | 'PAGE_TOKENS_CLAIMED'
+  // Budget alert toast (content script)
+  | 'BUDGET_WARNING';
 
 // Base message structure
 export interface BaseMessage {
@@ -134,6 +138,7 @@ export interface ApprovalResponseMessage extends BaseMessage {
   type: 'APPROVAL_RESPONSE';
   requestId: string;
   approved: boolean;
+  approveTab?: boolean;   // true = approve for this tab session only
   rememberSite: boolean;
 }
 
@@ -307,6 +312,15 @@ export interface RecoveryState {
   result?: RecoveryResult;
 }
 
+// Budget warning sent from background to content script
+export interface BudgetWarningMessage extends BaseMessage {
+  type: 'BUDGET_WARNING';
+  spent: number;
+  limit: number;
+  hostname: string;
+  period: string;
+}
+
 // Union type for all messages
 export type ExtensionMessage =
   | PaymentRequiredMessage
@@ -315,4 +329,5 @@ export type ExtensionMessage =
   | PaymentFailedMessage
   | ApprovalRequestMessage
   | ApprovalResponseMessage
+  | BudgetWarningMessage
   | BaseMessage;

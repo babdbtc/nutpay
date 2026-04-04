@@ -50,6 +50,7 @@ function Approval() {
   const [rememberSite, setRememberSite] = useState(false);
   const [timeLeft, setTimeLeft] = useState(60);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [originHasAutoApprove, setOriginHasAutoApprove] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -70,12 +71,20 @@ function Approval() {
 
     chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }).then((data) => {
       if (data) {
-        // Merge with defaults to ensure new settings fields have values
         const merged = { ...DEFAULT_SETTINGS, ...data };
         setSettings(merged);
         applyTheme(merged.theme || 'midnight');
       }
     });
+
+    const origin = params.get('origin') || '';
+    if (origin) {
+      chrome.runtime.sendMessage({ type: 'GET_ALLOWLIST_ENTRY', origin }).then((entry) => {
+        if (entry && entry.autoApprove) {
+          setOriginHasAutoApprove(true);
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -98,21 +107,20 @@ function Approval() {
     };
   }, [details]);
 
-  const sendResponse = (approved: boolean) => {
+  const sendResponse = (approved: boolean, approveTab: boolean = false) => {
     if (!details) return;
 
-    // Clear the auto-deny timer
     if (timerRef.current) clearInterval(timerRef.current);
 
     chrome.runtime.sendMessage({
       type: 'APPROVAL_RESPONSE',
       requestId: details.requestId,
       approved,
+      approveTab,
       rememberSite,
     });
 
     if (approved && settings.enableAnimations) {
-      // Show success animation, then close
       setShowSuccess(true);
       setTimeout(() => window.close(), 600);
     } else {
@@ -121,14 +129,17 @@ function Approval() {
   };
 
   const handleApprove = useCallback(() => sendResponse(true), [details, rememberSite, settings.enableAnimations]);
+  const handleApproveTab = useCallback(() => sendResponse(true, true), [details, rememberSite, settings.enableAnimations]);
   const handleDeny = useCallback(() => sendResponse(false), [details]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!details) return;
 
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (!originHasAutoApprove) handleApproveTab();
+      } else if (e.key === 'Enter') {
         e.preventDefault();
         handleApprove();
       } else if (e.key === 'Escape') {
@@ -139,7 +150,7 @@ function Approval() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [details, handleApprove, handleDeny]);
+  }, [details, handleApprove, handleApproveTab, handleDeny, originHasAutoApprove]);
 
   if (!details) {
     return (
@@ -238,23 +249,35 @@ function Approval() {
       </div>
 
       {/* Buttons */}
-      <div className="flex gap-3 mt-2">
+      <div className="flex gap-2 mt-2">
         <Button
           variant="secondary"
           className="flex-1"
           onClick={handleDeny}
         >
           Deny
-          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
+          <Badge variant="outline" className="ml-1.5 text-[10px] px-1.5 py-0 h-5 border-muted-foreground/30">
             Esc
           </Badge>
         </Button>
+        {!originHasAutoApprove && (
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={handleApproveTab}
+          >
+            Approve Tab
+            <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 h-5 border-muted-foreground/30">
+              Ctrl+&#x23CE;
+            </Badge>
+          </Button>
+        )}
         <Button
           className="flex-1"
           onClick={handleApprove}
         >
           Pay
-          <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-5 border-green-400/30">
+          <Badge variant="outline" className="ml-1.5 text-[10px] px-1.5 py-0 h-5 border-green-400/30">
             Enter
           </Badge>
         </Button>
