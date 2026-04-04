@@ -47,6 +47,7 @@ export function GeneralSettings() {
           <Switch
             checked={settings.alwaysAsk}
             onCheckedChange={(v) => updateSetting('alwaysAsk', v)}
+            aria-label="Always ask before paying"
           />
         </div>
 
@@ -62,6 +63,7 @@ export function GeneralSettings() {
           <Switch
             checked={settings.autoDiscoverMints}
             onCheckedChange={(v) => updateSetting('autoDiscoverMints', v)}
+            aria-label="Auto-discover mints"
           />
         </div>
 
@@ -77,6 +79,7 @@ export function GeneralSettings() {
           <Switch
             checked={settings.autoClaimTokens}
             onCheckedChange={(v) => updateSetting('autoClaimTokens', v)}
+            aria-label="Auto-claim ecash tokens"
           />
         </div>
 
@@ -155,6 +158,7 @@ export function GeneralSettings() {
           <Switch
             checked={settings.enableAnimations}
             onCheckedChange={(v) => updateSetting('enableAnimations', v)}
+            aria-label="Animations"
           />
         </div>
 
@@ -170,6 +174,7 @@ export function GeneralSettings() {
           <Switch
             checked={settings.showBadgeBalance}
             onCheckedChange={(v) => updateSetting('showBadgeBalance', v)}
+            aria-label="Show balance on icon"
           />
         </div>
       </CardContent>

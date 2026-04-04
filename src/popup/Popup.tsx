@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Toaster } from 'sonner';
 import { useWalletAuth } from '../hooks/useWalletAuth';
 import { useWalletData } from '../hooks/useWalletData';
 import { usePageEcash } from '../hooks/usePageEcash';
@@ -71,11 +72,13 @@ function Popup() {
             onClick={openSidePanel}
             className="text-muted-foreground hover:text-foreground"
             title="Open in side panel"
+            aria-label="Open in side panel"
           >
             <PanelRightOpen className="h-5 w-5" />
           </Button>
         }
       />
+      <Toaster theme="dark" position="bottom-center" />
     </ErrorBoundary>
   );
 }

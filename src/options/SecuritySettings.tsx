@@ -516,6 +516,7 @@ export function SecuritySettings() {
                   type="button"
                   onClick={() => setChangeShowPassword(!changeShowPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                  aria-label={changeShowPassword ? 'Hide password' : 'Show password'}
                 >
                   {changeShowPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -621,6 +622,7 @@ export function SecuritySettings() {
                     type="button"
                     onClick={() => setRecoveryShowPassword(!recoveryShowPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                    aria-label={recoveryShowPassword ? 'Hide password' : 'Show password'}
                   >
                     {recoveryShowPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -716,6 +718,7 @@ export function SecuritySettings() {
                   type="button"
                   onClick={() => setDisableShowPassword(!disableShowPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                  aria-label={disableShowPassword ? 'Hide password' : 'Show password'}
                 >
                   {disableShowPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
