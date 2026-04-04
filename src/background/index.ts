@@ -56,6 +56,7 @@ import {
   handleRequestLnurlInvoice,
 } from './lightning-handlers';
 import { runStartup, setupPeriodicTasks, setupInstallHandler } from './startup';
+import { registerTabLifecycleListeners } from './tab-lifecycle';
 
 let pendingReconciliationOnUnlock = false;
 
@@ -241,6 +242,7 @@ setInterval(() => {
 runStartup((val) => { pendingReconciliationOnUnlock = val; });
 setupPeriodicTasks();
 setupInstallHandler();
+registerTabLifecycleListeners();
 
 updateBadgeBalance();
 console.log('[Nutpay] Background service worker started');
