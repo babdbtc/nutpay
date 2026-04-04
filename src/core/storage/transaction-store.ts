@@ -135,6 +135,64 @@ export async function getSpendingByDomain(): Promise<DomainSpending[]> {
   return Array.from(domainMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
 }
 
+// Get spending analytics grouped by domain for a specific time period
+export async function getSpendingByDomainForPeriod(
+  period: 'today' | 'week' | 'month' | 'all'
+): Promise<DomainSpending[]> {
+  let startDate: number | undefined;
+
+  if (period === 'today') {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    startDate = today.getTime();
+  } else if (period === 'week') {
+    startDate = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  } else if (period === 'month') {
+    const now = new Date();
+    startDate = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  }
+
+  const { transactions } = await getFilteredTransactions(
+    {
+      type: 'payment',
+      status: 'completed',
+      ...(startDate !== undefined ? { startDate } : {}),
+    },
+    500
+  );
+
+  const domainMap = new Map<string, DomainSpending>();
+
+  for (const tx of transactions) {
+    if (!tx.origin) continue;
+
+    const existing = domainMap.get(tx.origin);
+    let hostname: string;
+    try {
+      hostname = new URL(tx.origin).hostname;
+    } catch {
+      hostname = tx.origin;
+    }
+
+    if (existing) {
+      existing.totalSpent += tx.amount;
+      existing.transactionCount += 1;
+      existing.lastPayment = Math.max(existing.lastPayment, tx.timestamp);
+    } else {
+      domainMap.set(tx.origin, {
+        origin: tx.origin,
+        hostname,
+        totalSpent: tx.amount,
+        transactionCount: 1,
+        lastPayment: tx.timestamp,
+      });
+    }
+  }
+
+  // Sort by total spent descending
+  return Array.from(domainMap.values()).sort((a, b) => b.totalSpent - a.totalSpent);
+}
+
 // Filter interface for transactions
 export interface TransactionFilters {
   type?: 'payment' | 'receive';
