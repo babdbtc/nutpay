@@ -15,7 +15,7 @@ import {
   unsubscribeMintQuote,
   recoverStuckPendingProofs,
 } from '../core/wallet/cashu-wallet';
-import { getRecentTransactions, getSpendingByDomain } from '../core/storage/transaction-store';
+import { getRecentTransactions, getSpendingByDomain, getSpendingByDomainForPeriod } from '../core/storage/transaction-store';
 import { getSettings, getMints, addMint, updateMint, removeMint } from '../core/storage/settings-store';
 import type { MintConfig } from '../shared/types';
 import { getAllowlist, getAllowlistEntry, setAllowlistEntry, removeAllowlistEntry, createDefaultAllowlistEntry } from '../core/storage/allowlist-store';
@@ -214,6 +214,10 @@ async function handleMessage(message: ExtensionMessage, tabId: number): Promise<
     }
     case 'GET_SPENDING_BY_DOMAIN':
       return getSpendingByDomain();
+    case 'GET_SPENDING_DASHBOARD': {
+      const { period } = message as ExtensionMessage & { period: 'today' | 'week' | 'month' | 'all' };
+      return getSpendingByDomainForPeriod(period);
+    }
     case 'RESOLVE_LNURL':
       return handleResolveLnurl(message as Parameters<typeof handleResolveLnurl>[0]);
     case 'REQUEST_LNURL_INVOICE':

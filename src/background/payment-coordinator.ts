@@ -5,7 +5,7 @@ import { APPROVAL_POPUP, TIMEOUTS } from '../shared/constants';
 const approvalCallbacks = new Map<
   string,
   {
-    resolve: (response: { approved: boolean; rememberSite: boolean }) => void;
+    resolve: (response: { approved: boolean; rememberSite: boolean; approveTab?: boolean }) => void;
     reject: (error: Error) => void;
     popupId?: number;
   }
@@ -62,7 +62,7 @@ export async function openApprovalPopup(
 export function waitForApproval(
   requestId: string,
   popupId: number
-): Promise<{ approved: boolean; rememberSite: boolean }> {
+): Promise<{ approved: boolean; rememberSite: boolean; approveTab?: boolean }> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       approvalCallbacks.delete(requestId);
@@ -102,6 +102,7 @@ export function handleApprovalResponse(message: ApprovalResponseMessage): void {
     callback.resolve({
       approved: message.approved,
       rememberSite: message.rememberSite,
+      approveTab: message.approveTab,
     });
   }
 }
