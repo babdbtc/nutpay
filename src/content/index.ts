@@ -6,6 +6,7 @@ const MSG_TO_CONTENT = 'nutpay_to_content';
 const MSG_FROM_CONTENT = 'nutpay_from_content';
 
 import { initEcashScanner, getFoundTokens, handleTokensClaimed } from './ecash-scanner';
+import { showBudgetWarningToast } from './budget-toast';
 
 // Inject the interceptor script into the page
 function injectScript(): void {
@@ -96,6 +97,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Tokens were claimed from the popup/sidepanel — dismiss the in-page toast
   if (message.type === 'PAGE_TOKENS_CLAIMED') {
     handleTokensClaimed();
+    return;
+  }
+
+  if (message.type === 'BUDGET_WARNING') {
+    showBudgetWarningToast(message);
     return;
   }
 

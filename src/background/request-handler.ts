@@ -12,7 +12,10 @@ import {
   recordPayment,
   getAllowlistEntry,
   isMonthlyLimitExceeded,
+  withDefaults,
 } from '../core/storage/allowlist-store';
+import { calculateBudgetStatus } from './budget-alerts';
+import type { BudgetStatus } from './budget-alerts';
 import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval, openUnlockPopup, waitForUnlock } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
@@ -347,14 +350,19 @@ async function processPayment(
     pendingPayments.delete(requestId);
 
     if (result.success && result.token) {
-      // Record the payment for allowlist tracking
+      const preEntry = await getAllowlistEntry(origin);
+      const preStatus: BudgetStatus | null = preEntry
+        ? calculateBudgetStatus(preEntry)
+        : null;
+
       await recordPayment(origin, paymentRequest.amount);
       recordPaymentTimestamp(origin);
 
-      // Update badge for the tab to reflect new spending
-      updateBadgeForTab(tabId).catch(() => {
-        // Silently fail - badge update is not critical
-      });
+      updateBadgeForTab(tabId).catch(() => {});
+
+      if (preStatus && preStatus.overallLevel === 'normal') {
+        sendBudgetWarningIfCrossed(origin, preStatus, tabId);
+      }
 
       return {
         type: 'PAYMENT_TOKEN',
@@ -378,7 +386,44 @@ async function processPayment(
   }
 }
 
-// Get a pending payment by request ID
+async function sendBudgetWarningIfCrossed(
+  origin: string,
+  preStatus: BudgetStatus,
+  tabId: number,
+): Promise<void> {
+  try {
+    const postEntry = await getAllowlistEntry(origin);
+    if (!postEntry) return;
+
+    const postStatus = calculateBudgetStatus(postEntry);
+    if (postStatus.overallLevel !== 'warning') return;
+
+    const e = withDefaults(postEntry);
+    let period = 'daily';
+    let spent = e.dailySpent;
+    let limit = e.maxPerDay;
+
+    if (preStatus.dailyLevel === 'normal' && postStatus.dailyLevel === 'warning') {
+      period = 'daily';
+      spent = e.dailySpent;
+      limit = e.maxPerDay;
+    } else if (preStatus.monthlyLevel === 'normal' && postStatus.monthlyLevel === 'warning') {
+      period = 'monthly';
+      spent = e.monthlySpent;
+      limit = e.maxPerMonth;
+    }
+
+    const hostname = new URL(origin).hostname;
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'BUDGET_WARNING' as const,
+      spent,
+      limit,
+      hostname,
+      period,
+    });
+  } catch {}
+}
+
 export function getPendingPayment(requestId: string): PendingPayment | undefined {
   return pendingPayments.get(requestId);
 }
