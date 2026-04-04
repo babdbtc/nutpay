@@ -10,6 +10,8 @@ vi.mock('../core/storage/allowlist-store', () => ({
   isAutoApproved: vi.fn(),
   recordPayment: vi.fn(),
   getAllowlistEntry: vi.fn(),
+  isMonthlyLimitExceeded: vi.fn(async () => ({ exceeded: false })),
+  withDefaults: vi.fn(<T>(entry: T) => entry),
 }));
 
 vi.mock('../core/protocol/xcashu', () => ({
@@ -42,13 +44,25 @@ vi.mock('../core/storage/security-store', () => ({
   isAccountLocked: vi.fn(),
 }));
 
+vi.mock('../core/storage/tab-session-store', () => ({
+  isTabSessionValid: vi.fn(async () => false),
+  createTabSession: vi.fn(async () => undefined),
+}));
+
+vi.mock('./velocity-limiter', () => ({
+  checkVelocityLimit: vi.fn(() => ({ allowed: true })),
+  recordPaymentTimestamp: vi.fn(),
+}));
+
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
-import { isAutoApproved, recordPayment, getAllowlistEntry } from '../core/storage/allowlist-store';
+import { isAutoApproved, recordPayment, getAllowlistEntry, isMonthlyLimitExceeded } from '../core/storage/allowlist-store';
 import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
 import { getMints } from '../core/storage/settings-store';
 import { getSecurityConfig } from '../core/storage/security-store';
+import { isTabSessionValid } from '../core/storage/tab-session-store';
+import { checkVelocityLimit, recordPaymentTimestamp } from './velocity-limiter';
 
 const MINT_URL = 'https://mint.example.com';
 const ORIGIN = 'https://example.com';
@@ -85,6 +99,10 @@ function setupBaselineSuccess() {
   vi.mocked(waitForApproval).mockResolvedValue({ approved: true, rememberSite: false });
   vi.mocked(createPaymentToken).mockResolvedValue({ success: true, token: 'cashuBtesttoken' });
   vi.mocked(recordPayment).mockResolvedValue(undefined);
+  vi.mocked(isTabSessionValid).mockResolvedValue(false);
+  vi.mocked(checkVelocityLimit).mockReturnValue({ allowed: true });
+  vi.mocked(recordPaymentTimestamp).mockReturnValue(undefined);
+  vi.mocked(isMonthlyLimitExceeded).mockResolvedValue({ exceeded: false });
 }
 
 describe('handlePaymentRequired', () => {
@@ -193,5 +211,133 @@ describe('handlePaymentRequired', () => {
 
     expect(result.type).toBe('PAYMENT_DENIED');
     expect((result as { type: string; reason: string }).reason).toMatch(/denied/i);
+  });
+});
+
+describe('handlePaymentRequired – policy integration (Tasks 6 & 7)', () => {
+  const PREFERRED_MINT = 'https://preferred.mint.com';
+  const FALLBACK_MINT = 'https://fallback.mint.com';
+  const CURRENT_MONTH = new Date().toISOString().slice(0, 7);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('processes payment without approval popup when a valid tab session exists', async () => {
+    setupBaselineSuccess();
+    vi.mocked(isTabSessionValid).mockResolvedValue(true);
+
+    const result = await handlePaymentRequired(mockMessage, 1);
+
+    expect(result.type).toBe('PAYMENT_TOKEN');
+    expect((result as { type: string; token: string }).token).toBe('cashuBtesttoken');
+    expect(openApprovalPopup).not.toHaveBeenCalled();
+    expect(waitForApproval).not.toHaveBeenCalled();
+  });
+
+  it('returns PAYMENT_DENIED with velocity reason when velocity limit is exceeded', async () => {
+    setupBaselineSuccess();
+    vi.mocked(checkVelocityLimit).mockReturnValue({
+      allowed: false,
+      reason: 'Rate limit exceeded: too many payments to example.com in the last minute. Try again shortly.',
+    });
+
+    const result = await handlePaymentRequired(mockMessage, 1);
+
+    expect(result.type).toBe('PAYMENT_DENIED');
+    expect((result as { type: string; reason: string }).reason).toMatch(/rate limit/i);
+  });
+
+  it('returns PAYMENT_DENIED when payment would exceed monthly limit', async () => {
+    setupBaselineSuccess();
+    vi.mocked(getAllowlistEntry).mockResolvedValue({
+      origin: ORIGIN,
+      autoApprove: false,
+      maxPerPayment: 500,
+      maxPerDay: 5000,
+      dailySpent: 0,
+      lastResetDate: TODAY,
+      maxPerMonth: 1000,
+      monthlySpent: 950,
+      lastMonthlyReset: CURRENT_MONTH,
+      preferredMint: null,
+    });
+    vi.mocked(isMonthlyLimitExceeded).mockResolvedValue({
+      exceeded: true,
+      reason: 'Payment of 100 sats would exceed monthly limit (950/1000 sats already spent)',
+    });
+
+    const result = await handlePaymentRequired(mockMessage, 1);
+
+    expect(result.type).toBe('PAYMENT_DENIED');
+    expect((result as { type: string; reason: string }).reason).toMatch(/monthly limit/i);
+  });
+
+  it('selects preferred mint when it has sufficient balance and falls later in the accepted list', async () => {
+    setupBaselineSuccess();
+    vi.mocked(decodePaymentRequestHeader).mockReturnValue({
+      mints: [FALLBACK_MINT, PREFERRED_MINT],
+      amount: 100,
+      unit: 'sat',
+    });
+    vi.mocked(getMints).mockResolvedValue([
+      { url: FALLBACK_MINT, name: 'Fallback Mint', enabled: true, trusted: true },
+      { url: PREFERRED_MINT, name: 'Preferred Mint', enabled: true, trusted: true },
+    ]);
+    vi.mocked(getBalanceByMint).mockResolvedValue(
+      new Map([[FALLBACK_MINT, 50], [PREFERRED_MINT, 300]])
+    );
+    vi.mocked(getAllowlistEntry).mockResolvedValue({
+      origin: ORIGIN,
+      autoApprove: true,
+      maxPerPayment: 500,
+      maxPerDay: 5000,
+      dailySpent: 0,
+      lastResetDate: TODAY,
+      maxPerMonth: 10000,
+      monthlySpent: 0,
+      lastMonthlyReset: CURRENT_MONTH,
+      preferredMint: PREFERRED_MINT,
+    });
+    vi.mocked(isAutoApproved).mockResolvedValue(true);
+
+    const result = await handlePaymentRequired(mockMessage, 1);
+
+    expect(result.type).toBe('PAYMENT_TOKEN');
+    expect((result as { type: string; token: string }).token).toBe('cashuBtesttoken');
+  });
+
+  it('falls back to another mint when preferred mint has insufficient balance', async () => {
+    setupBaselineSuccess();
+    vi.mocked(decodePaymentRequestHeader).mockReturnValue({
+      mints: [PREFERRED_MINT, FALLBACK_MINT],
+      amount: 100,
+      unit: 'sat',
+    });
+    vi.mocked(getMints).mockResolvedValue([
+      { url: PREFERRED_MINT, name: 'Preferred Mint', enabled: true, trusted: true },
+      { url: FALLBACK_MINT, name: 'Fallback Mint', enabled: true, trusted: true },
+    ]);
+    vi.mocked(getBalanceByMint).mockResolvedValue(
+      new Map([[PREFERRED_MINT, 50], [FALLBACK_MINT, 300]])
+    );
+    vi.mocked(getAllowlistEntry).mockResolvedValue({
+      origin: ORIGIN,
+      autoApprove: true,
+      maxPerPayment: 500,
+      maxPerDay: 5000,
+      dailySpent: 0,
+      lastResetDate: TODAY,
+      maxPerMonth: 10000,
+      monthlySpent: 0,
+      lastMonthlyReset: CURRENT_MONTH,
+      preferredMint: PREFERRED_MINT,
+    });
+    vi.mocked(isAutoApproved).mockResolvedValue(true);
+
+    const result = await handlePaymentRequired(mockMessage, 1);
+
+    expect(result.type).toBe('PAYMENT_TOKEN');
+    expect((result as { type: string; token: string }).token).toBe('cashuBtesttoken');
   });
 });
