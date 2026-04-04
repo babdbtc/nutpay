@@ -22,6 +22,7 @@ import { normalizeMintUrl } from '../shared/format';
 import { getSecurityConfig, isSessionValid, isAccountLocked } from '../core/storage/security-store';
 import { checkVelocityLimit, recordPaymentTimestamp } from './velocity-limiter';
 import { createTabSession, isTabSessionValid } from '../core/storage/tab-session-store';
+import { updateBadgeForTab } from './badge-manager';
 
 // Store pending payments
 const pendingPayments = new Map<string, PendingPayment>();
@@ -338,7 +339,7 @@ export async function handlePaymentRequired(
 async function processPayment(
   pending: PendingPayment
 ): Promise<PaymentTokenMessage | PaymentFailedMessage> {
-  const { requestId, origin, paymentRequest } = pending;
+  const { requestId, origin, paymentRequest, tabId } = pending;
 
   try {
     const result = await createPaymentToken(paymentRequest, origin);
@@ -349,6 +350,11 @@ async function processPayment(
       // Record the payment for allowlist tracking
       await recordPayment(origin, paymentRequest.amount);
       recordPaymentTimestamp(origin);
+
+      // Update badge for the tab to reflect new spending
+      updateBadgeForTab(tabId).catch(() => {
+        // Silently fail - badge update is not critical
+      });
 
       return {
         type: 'PAYMENT_TOKEN',

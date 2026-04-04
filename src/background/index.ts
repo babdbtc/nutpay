@@ -18,13 +18,13 @@ import {
 import { getRecentTransactions, getSpendingByDomain } from '../core/storage/transaction-store';
 import { getSettings, getMints, addMint, updateMint, removeMint } from '../core/storage/settings-store';
 import type { MintConfig } from '../shared/types';
-import { getAllowlist, setAllowlistEntry, removeAllowlistEntry, createDefaultAllowlistEntry } from '../core/storage/allowlist-store';
+import { getAllowlist, getAllowlistEntry, setAllowlistEntry, removeAllowlistEntry, createDefaultAllowlistEntry } from '../core/storage/allowlist-store';
 import { getPendingMintQuotes, cleanupOldMintQuotes } from '../core/storage/pending-quote-store';
 import { getPendingTokens, cleanupOldPendingTokens } from '../core/storage/pending-token-store';
 import { getSecurityConfig, clearSession } from '../core/storage/security-store';
 import { clearSessionKey } from '../core/storage/crypto-utils';
 import { reconcileProofStates } from '../core/wallet/proof-manager';
-import { updateBadgeBalance } from './badge-manager';
+import { updateBadgeBalance, updateBadgeForTab } from './badge-manager';
 import { handleContextMenuClick } from './context-menu';
 import {
   handleAddProofs,
@@ -120,6 +120,8 @@ async function handleMessage(message: ExtensionMessage, tabId: number): Promise<
       return removeAllowlistEntry((message as ExtensionMessage & { origin: string }).origin);
     case 'UPDATE_ALLOWLIST_ENTRY':
       return setAllowlistEntry((message as ExtensionMessage & { entry: AllowlistEntry }).entry);
+    case 'GET_ALLOWLIST_ENTRY':
+      return getAllowlistEntry((message as ExtensionMessage & { origin: string }).origin);
     case 'CREATE_MINT_QUOTE': {
       const msg = message as ExtensionMessage & { mintUrl: string; amount: number };
       return createLightningReceiveInvoice(msg.mintUrl, msg.amount);
@@ -243,6 +245,18 @@ runStartup((val) => { pendingReconciliationOnUnlock = val; });
 setupPeriodicTasks();
 setupInstallHandler();
 registerTabLifecycleListeners();
+
+// Register tab event listeners for per-site badge updates
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  updateBadgeForTab(activeInfo.tabId);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  // Update badge when URL changes
+  if (changeInfo.url) {
+    updateBadgeForTab(tabId);
+  }
+});
 
 updateBadgeBalance();
 console.log('[Nutpay] Background service worker started');
