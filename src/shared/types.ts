@@ -266,6 +266,12 @@ export interface SessionState {
   lockedUntil: number | null; // Timestamp when lockout ends
 }
 
+// Tab-scoped approval session (stored in chrome.storage.session)
+export interface TabSession {
+  origin: string;
+  approvedAt: number;
+}
+
 // NUT-13 Recovery Progress
 export interface RecoveryProgress {
   mintUrl: string;
