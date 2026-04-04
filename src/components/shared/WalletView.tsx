@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock, Check, X } from 'lucide-react';
+import { Settings as SettingsIcon, ArrowDownLeft, ArrowUpRight, Loader2, Lock, Check, X, Copy } from 'lucide-react';
 import type { AuthState } from '../../hooks/useWalletAuth';
 import type { PageToken } from '../../hooks/usePageEcash';
 
@@ -83,6 +83,8 @@ export function WalletView({
   const [selectedMintInfo, setSelectedMintInfo] = useState<{ url: string; name: string } | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [receiving, setReceiving] = useState(false);
+  const [expandedTx, setExpandedTx] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const handleReceive = async () => {
     if (!tokenInput.trim()) return;
@@ -211,7 +213,10 @@ export function WalletView({
     <div className={`${containerClass} bg-background p-4 flex flex-col gap-3`}>
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold text-primary">Nutpay</h1>
+        <div className="flex items-center gap-2">
+            <img src="/assets/icons/icon-32.png" alt="" className="w-6 h-6" />
+            <h1 className="text-xl font-bold text-primary" style={{ fontFamily: 'CascadiaCode, monospace' }}>Nutpay</h1>
+          </div>
         <div className="flex items-center gap-1">
           {headerActions}
           {securityEnabled && (
@@ -362,17 +367,47 @@ export function WalletView({
             <ScrollArea className="flex-1 min-h-[120px]">
               <div className="flex flex-col gap-1.5">
                 {transactions.map((tx) => (
-                  <Card key={tx.id} className="bg-card border-0">
-                    <CardContent className="py-2 px-3 flex justify-between items-center">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-white">
-                          {tx.type === 'payment' ? getOriginHost(tx.origin) : 'Received'}
+                  <Card
+                    key={tx.id}
+                    className={`bg-card border-0 ${tx.token ? 'cursor-pointer hover:bg-muted transition-colors' : ''}`}
+                    onClick={() => tx.token && setExpandedTx(expandedTx === tx.id ? null : tx.id)}
+                  >
+                    <CardContent className="py-2 px-3">
+                      <div className="flex justify-between items-center">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-white">
+                            {tx.type === 'payment' ? getOriginHost(tx.origin) : 'Received'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{formatTime(tx.timestamp)}</span>
+                        </div>
+                        <span className={`text-sm font-semibold ${tx.type === 'payment' ? 'text-red-400' : 'text-green-400'}`}>
+                          {formatTransactionAmount(tx.amount, tx.type, settings.displayFormat)}
                         </span>
-                        <span className="text-xs text-muted-foreground">{formatTime(tx.timestamp)}</span>
                       </div>
-                      <span className={`text-sm font-semibold ${tx.type === 'payment' ? 'text-red-400' : 'text-green-400'}`}>
-                        {formatTransactionAmount(tx.amount, tx.type, settings.displayFormat)}
-                      </span>
+                      {expandedTx === tx.id && tx.token && (
+                        <div className="mt-2 pt-2 border-t border-[#333] space-y-1.5">
+                          <div className="bg-popover rounded p-2 text-[10px] text-muted-foreground break-all max-h-[60px] overflow-y-auto select-all">
+                            {tx.token}
+                          </div>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-6 text-xs w-full"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await navigator.clipboard.writeText(tx.token!);
+                              setCopiedToken(tx.id);
+                              setTimeout(() => setCopiedToken(null), 2000);
+                            }}
+                          >
+                            {copiedToken === tx.id ? (
+                              <><Check className="h-3 w-3 mr-1" /> Copied</>
+                            ) : (
+                              <><Copy className="h-3 w-3 mr-1" /> Copy Token</>
+                            )}
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Check, AlertCircle, Clock } from 'lucide-react';
+import { AnimatedCheckmark } from '../../components/shared/AnimatedCheckmark';
 
 interface LightningReceiveProps {
   mints: MintConfig[];
@@ -211,44 +212,48 @@ export function LightningReceive({ mints, displayFormat, onSuccess, onClose }: L
           {formatAmount(quote.amount, displayFormat)}
         </p>
 
-        <div className="flex flex-col items-center gap-3 p-4 bg-card rounded-xl">
-          <QRCode value={quote.invoice} size={180} />
-          <div className="text-[10px] text-muted-foreground break-all max-h-[60px] overflow-auto p-2 bg-popover rounded-md w-full">
-            {quote.invoice}
+        {status === 'success' ? (
+          <div className="flex flex-col items-center gap-4 p-4 bg-card rounded-xl">
+            <AnimatedCheckmark />
+            <p className="text-lg font-semibold text-green-500 animate-fade-in-up">
+              {formatAmount(quote.amount, displayFormat)} received!
+            </p>
           </div>
-          <Button variant="secondary" size="sm" onClick={copyToClipboard}>
-            {copied ? <><Check className="h-3 w-3 mr-1" /> Copied!</> : 'Copy Invoice'}
-          </Button>
-        </div>
+        ) : (
+          <>
+            <div className="flex flex-col items-center gap-3 p-4 bg-card rounded-xl">
+              <QRCode value={quote.invoice} size={180} />
+              <div className="text-[10px] text-muted-foreground break-all max-h-[60px] overflow-auto p-2 bg-popover rounded-md w-full">
+                {quote.invoice}
+              </div>
+              <Button variant="secondary" size="sm" onClick={copyToClipboard}>
+                {copied ? <><Check className="h-3 w-3 mr-1" /> Copied!</> : 'Copy Invoice'}
+              </Button>
+            </div>
 
-        {status === 'waiting' && (
-          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
-            <Clock className="h-4 w-4 animate-pulse" />
-            Waiting for payment...
-          </div>
-        )}
+            {status === 'waiting' && (
+              <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
+                <Clock className="h-4 w-4 animate-pulse" />
+                Waiting for payment...
+              </div>
+            )}
 
-        {status === 'waiting' && countdown !== null && countdown < 60 && (
-          <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-red-500/10 text-red-400 text-xs">
-            <AlertCircle className="h-3 w-3 shrink-0" />
-            {countdown <= 0
-              ? 'Invoice expired. Create a new one.'
-              : `Invoice expires in ${countdown} second${countdown === 1 ? '' : 's'}`}
-          </div>
-        )}
+            {status === 'waiting' && countdown !== null && countdown < 60 && (
+              <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-red-500/10 text-red-400 text-xs">
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                {countdown <= 0
+                  ? 'Invoice expired. Create a new one.'
+                  : `Invoice expires in ${countdown} second${countdown === 1 ? '' : 's'}`}
+              </div>
+            )}
 
-        {status === 'minting' && (
-          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Payment received! Minting proofs...
-          </div>
-        )}
-
-        {status === 'success' && (
-          <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-500/10 text-green-500 text-sm">
-            <Check className="h-4 w-4" />
-            Success! Proofs minted.
-          </div>
+            {status === 'minting' && (
+              <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Payment received! Minting proofs...
+              </div>
+            )}
+          </>
         )}
 
         {status === 'error' && (

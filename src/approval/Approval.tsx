@@ -4,34 +4,12 @@ import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
 import { applyTheme } from '../shared/theme';
 import { ErrorBoundary } from '../components/shared/ErrorBoundary';
+import { AnimatedCheckmark } from '../components/shared/AnimatedCheckmark';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-
-function AnimatedCheckmark() {
-  return (
-    <div className="relative flex items-center justify-center">
-      <div className="w-20 h-20 rounded-full bg-green-500/20 animate-circle-fill animate-success-pulse flex items-center justify-center">
-        <svg
-          className="w-10 h-10 text-green-500"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path
-            className="animate-checkmark-draw"
-            d="M4 12l6 6L20 6"
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
 
 interface PaymentDetails {
   requestId: string;
@@ -260,18 +238,6 @@ function Approval() {
             Esc
           </Badge>
         </Button>
-        {!originHasAutoApprove && (
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={handleApproveTab}
-          >
-            Approve Tab
-            <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 h-5 border-muted-foreground/30">
-              Ctrl+&#x23CE;
-            </Badge>
-          </Button>
-        )}
         <Button
           className="flex-1"
           onClick={handleApprove}
@@ -282,6 +248,19 @@ function Approval() {
           </Badge>
         </Button>
       </div>
+      {!originHasAutoApprove && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs text-muted-foreground"
+          onClick={handleApproveTab}
+        >
+          Approve for this tab session
+          <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 h-5 border-muted-foreground/30">
+            Ctrl+&#x23CE;
+          </Badge>
+        </Button>
+      )}
 
       {/* Timer */}
       <p className="text-center text-xs text-muted-foreground">

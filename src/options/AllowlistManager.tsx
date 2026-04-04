@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { AllowlistEntry, MintConfig, Settings } from '../shared/types';
-import { DEFAULT_SETTINGS } from '../shared/constants';
+import { DEFAULT_SETTINGS, STORAGE_KEYS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,18 +19,49 @@ export function AllowlistManager() {
   const [editPreferredMint, setEditPreferredMint] = useState<string | null>(null);
   const [mints, setMints] = useState<MintConfig[]>([]);
 
-  useEffect(() => {
-    Promise.all([
+  const loadAllowlistData = async () => {
+    const [allowlistData, settingsData, mintsData] = await Promise.all([
       chrome.runtime.sendMessage({ type: 'GET_ALLOWLIST' }),
       chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }),
       chrome.runtime.sendMessage({ type: 'GET_MINTS' }),
-    ]).then(([allowlistData, settingsData, mintsData]) => {
-      setAllowlist(allowlistData || []);
-      if (settingsData?.displayFormat) {
-        setDisplayFormat(settingsData.displayFormat);
+    ]);
+
+    setAllowlist(allowlistData || []);
+    if (settingsData?.displayFormat) {
+      setDisplayFormat(settingsData.displayFormat);
+    }
+    setMints(mintsData || []);
+  };
+
+  useEffect(() => {
+    loadAllowlistData().catch((err) => console.error('Failed to load allowlist:', err));
+
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string,
+    ) => {
+      if (areaName !== 'local') return;
+
+      if (
+        changes[STORAGE_KEYS.ALLOWLIST]
+        || changes[STORAGE_KEYS.SETTINGS]
+        || changes[STORAGE_KEYS.MINTS]
+      ) {
+        loadAllowlistData().catch((err) => console.error('Failed to refresh allowlist:', err));
       }
-      setMints(mintsData || []);
-    }).catch((err) => console.error('Failed to load allowlist:', err));
+    };
+
+    const handleWindowFocus = () => {
+      loadAllowlistData().catch((err) => console.error('Failed to refresh allowlist:', err));
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
   }, []);
 
   useEffect(() => {
