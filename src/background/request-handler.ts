@@ -7,7 +7,7 @@ import type {
   XCashuPaymentRequest,
 } from '../shared/types';
 import { createPaymentToken } from '../core/wallet/cashu-wallet';
-import { isAutoApproved, recordPayment, getAllowlistEntry } from '../core/storage/allowlist-store';
+import { isAutoApproved, recordPayment, getAllowlistEntry, withDefaults } from '../core/storage/allowlist-store';
 import { decodePaymentRequestHeader, validatePaymentRequest } from '../core/protocol/xcashu';
 import { openApprovalPopup, waitForApproval, openUnlockPopup, waitForUnlock } from './payment-coordinator';
 import { getBalanceByMint } from '../core/wallet/proof-manager';
@@ -21,7 +21,8 @@ const pendingPayments = new Map<string, PendingPayment>();
 
 // Check if payment is feasible (do we have enough balance from any accepted mint?)
 async function checkPaymentFeasibility(
-  paymentRequest: XCashuPaymentRequest
+  paymentRequest: XCashuPaymentRequest,
+  preferredMint?: string | null
 ): Promise<{
   canPay: boolean;
   selectedMint: string | null; // The mint we'll use
@@ -34,6 +35,29 @@ async function checkPaymentFeasibility(
   // Get our known mints and current balances
   const knownMints = await getMints();
   const balances = await getBalanceByMint();
+
+  // If preferred mint is set and in accepted mints, try it first
+  if (preferredMint) {
+    const normalizedPreferred = normalizeMintUrl(preferredMint);
+    const isAccepted = acceptedMints.some(
+      (m) => normalizeMintUrl(m) === normalizedPreferred
+    );
+
+    if (isAccepted) {
+      const knownMint = knownMints.find((m) => normalizeMintUrl(m.url) === normalizedPreferred);
+      const balance = balances.get(normalizedPreferred) || 0;
+
+      if (balance >= amount) {
+        return {
+          canPay: true,
+          selectedMint: normalizedPreferred,
+          balance,
+          mintKnown: !!knownMint,
+          mintName: knownMint?.name || new URL(preferredMint).hostname,
+        };
+      }
+    }
+  }
 
   // Try each accepted mint in order to find one we can pay from
   for (const requestedMint of acceptedMints) {
@@ -161,8 +185,12 @@ export async function handlePaymentRequired(
     };
   }
 
+  // Get preferred mint from allowlist entry if available
+  const allowlistEntry = await getAllowlistEntry(origin);
+  const preferredMint = allowlistEntry ? withDefaults(allowlistEntry).preferredMint : null;
+
   // Check if we can pay before showing popup
-  const feasibility = await checkPaymentFeasibility(paymentRequest);
+  const feasibility = await checkPaymentFeasibility(paymentRequest, preferredMint);
 
   if (!feasibility.canPay) {
     // Build a helpful error message
