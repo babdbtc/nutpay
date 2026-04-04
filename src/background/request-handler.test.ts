@@ -146,6 +146,10 @@ describe('handlePaymentRequired', () => {
       maxPerDay: 1000,
       dailySpent: 0,
       lastResetDate: TODAY,
+      maxPerMonth: 10000,
+      monthlySpent: 0,
+      lastMonthlyReset: '2026-04',
+      preferredMint: null,
     });
 
     const result = await handlePaymentRequired(mockMessage, 1);
@@ -169,6 +173,10 @@ describe('handlePaymentRequired', () => {
       maxPerDay: 1000,
       dailySpent: 950,
       lastResetDate: TODAY,
+      maxPerMonth: 10000,
+      monthlySpent: 0,
+      lastMonthlyReset: '2026-04',
+      preferredMint: null,
     });
 
     const result = await handlePaymentRequired(mockMessage, 1);
