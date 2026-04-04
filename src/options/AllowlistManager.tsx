@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { AllowlistEntry, Settings } from '../shared/types';
+import type { AllowlistEntry, MintConfig, Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/constants';
 import { formatAmount } from '../shared/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,17 +14,22 @@ export function AllowlistManager() {
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
   const [editMaxPerPayment, setEditMaxPerPayment] = useState('');
   const [editMaxPerDay, setEditMaxPerDay] = useState('');
+  const [editMaxPerMonth, setEditMaxPerMonth] = useState('');
   const [editAutoApprove, setEditAutoApprove] = useState(false);
+  const [editPreferredMint, setEditPreferredMint] = useState<string | null>(null);
+  const [mints, setMints] = useState<MintConfig[]>([]);
 
   useEffect(() => {
     Promise.all([
       chrome.runtime.sendMessage({ type: 'GET_ALLOWLIST' }),
       chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }),
-    ]).then(([allowlistData, settingsData]) => {
+      chrome.runtime.sendMessage({ type: 'GET_MINTS' }),
+    ]).then(([allowlistData, settingsData, mintsData]) => {
       setAllowlist(allowlistData || []);
       if (settingsData?.displayFormat) {
         setDisplayFormat(settingsData.displayFormat);
       }
+      setMints(mintsData || []);
     }).catch((err) => console.error('Failed to load allowlist:', err));
   }, []);
 
@@ -48,23 +53,30 @@ export function AllowlistManager() {
     setEditingEntry(entry.origin);
     setEditMaxPerPayment(String(entry.maxPerPayment));
     setEditMaxPerDay(String(entry.maxPerDay));
+    setEditMaxPerMonth(String(entry.maxPerMonth ?? 10000));
     setEditAutoApprove(entry.autoApprove);
+    setEditPreferredMint(entry.preferredMint ?? null);
   };
 
   const cancelEditing = () => {
     setEditingEntry(null);
     setEditMaxPerPayment('');
     setEditMaxPerDay('');
+    setEditMaxPerMonth('');
     setEditAutoApprove(false);
+    setEditPreferredMint(null);
   };
 
   const saveEntryEdits = async (entry: AllowlistEntry) => {
     const maxPerPayment = parseInt(editMaxPerPayment, 10) || 100;
     const maxPerDay = parseInt(editMaxPerDay, 10) || 1000;
+    const maxPerMonth = parseInt(editMaxPerMonth, 10) || 10000;
     const updatedEntry: AllowlistEntry = {
       ...entry,
       maxPerPayment,
       maxPerDay,
+      maxPerMonth,
+      preferredMint: editPreferredMint,
       autoApprove: editAutoApprove,
     };
     await chrome.runtime.sendMessage({ type: 'UPDATE_ALLOWLIST_ENTRY', entry: updatedEntry });
@@ -94,8 +106,33 @@ export function AllowlistManager() {
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Max {formatAmount(entry.maxPerPayment, displayFormat)}/payment,{' '}
-                      {formatAmount(entry.maxPerDay, displayFormat)}/day
+                      {formatAmount(entry.maxPerDay, displayFormat)}/day,{' '}
+                      {formatAmount(entry.maxPerMonth ?? 10000, displayFormat)}/month
                       {entry.autoApprove && ' (auto-approve)'}
+                    </span>
+                    {entry.preferredMint && (
+                      <span className="text-xs text-muted-foreground">
+                        Preferred: {(() => { try { return new URL(entry.preferredMint).hostname; } catch { return entry.preferredMint; } })()}
+                      </span>
+                    )}
+                    <span className="text-xs">
+                      {(() => {
+                        const dailySpent = entry.dailySpent ?? 0;
+                        const maxDay = entry.maxPerDay;
+                        const monthlySpent = entry.monthlySpent ?? 0;
+                        const maxMonth = entry.maxPerMonth ?? 10000;
+                        const dailyRatio = maxDay > 0 ? dailySpent / maxDay : 0;
+                        const monthlyRatio = maxMonth > 0 ? monthlySpent / maxMonth : 0;
+                        const dailyColor = dailyRatio >= 1 ? 'text-red-400' : dailyRatio >= 0.8 ? 'text-amber-400' : 'text-muted-foreground';
+                        const monthlyColor = monthlyRatio >= 1 ? 'text-red-400' : monthlyRatio >= 0.8 ? 'text-amber-400' : 'text-muted-foreground';
+                        return (
+                          <>
+                            <span className={dailyColor}>Today: {dailySpent}/{maxDay} sats</span>
+                            {' · '}
+                            <span className={monthlyColor}>Month: {monthlySpent}/{maxMonth} sats</span>
+                          </>
+                        );
+                      })()}
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -139,6 +176,36 @@ export function AllowlistManager() {
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
                         min="1"
                       />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="flex-1 text-xs text-muted-foreground">
+                        Max per month (sats)
+                      </Label>
+                      <Input
+                        type="number"
+                        className="w-24 bg-card border-input text-right text-sm"
+                        value={editMaxPerMonth}
+                        onChange={(e) => setEditMaxPerMonth(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
+                        min="1"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="flex-1 text-xs text-muted-foreground">
+                        Preferred mint
+                      </Label>
+                      <select
+                        className="w-40 rounded-md bg-card border border-input px-2 py-1.5 text-sm text-foreground"
+                        value={editPreferredMint ?? ''}
+                        onChange={(e) => setEditPreferredMint(e.target.value || null)}
+                      >
+                        <option value="">No preference</option>
+                        {mints.map((m) => (
+                          <option key={m.url} value={m.url}>
+                            {m.name || m.url}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="flex-1 text-xs text-muted-foreground">
