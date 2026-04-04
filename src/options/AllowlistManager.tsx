@@ -193,6 +193,7 @@ export function AllowlistManager() {
                         onChange={(e) => setEditMaxPerPayment(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
                         min="1"
+                        aria-label="Max per payment (sats)"
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -206,6 +207,7 @@ export function AllowlistManager() {
                         onChange={(e) => setEditMaxPerDay(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
                         min="1"
+                        aria-label="Max per day (sats)"
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -219,6 +221,7 @@ export function AllowlistManager() {
                         onChange={(e) => setEditMaxPerMonth(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); saveEntryEdits(entry); } else if (e.key === 'Escape') { e.stopPropagation(); cancelEditing(); } }}
                         min="1"
+                        aria-label="Max per month (sats)"
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -229,6 +232,7 @@ export function AllowlistManager() {
                         className="w-40 rounded-md bg-card border border-input px-2 py-1.5 text-sm text-foreground"
                         value={editPreferredMint ?? ''}
                         onChange={(e) => setEditPreferredMint(e.target.value || null)}
+                        aria-label="Preferred mint"
                       >
                         <option value="">No preference</option>
                         {mints.map((m) => (
@@ -245,6 +249,7 @@ export function AllowlistManager() {
                       <Switch
                         checked={editAutoApprove}
                         onCheckedChange={(v) => setEditAutoApprove(v)}
+                        aria-label="Auto-approve payments"
                       />
                     </div>
                     <div className="flex gap-2 pt-2">

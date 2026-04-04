@@ -1,3 +1,4 @@
+import { Toaster } from 'sonner';
 import { ErrorBoundary } from '../components/shared/ErrorBoundary';
 import { GeneralSettings } from './GeneralSettings';
 import { SecuritySettings } from './SecuritySettings';
@@ -20,6 +21,7 @@ function Options() {
         <MintManager />
         <AllowlistManager />
       </div>
+      <Toaster theme="dark" position="bottom-center" />
     </ErrorBoundary>
   );
 }
