@@ -40,6 +40,10 @@ const chromeMock = {
       set: vi.fn(async (items: Record<string, unknown>) => {
         Object.assign(sessionStore, items);
       }),
+      remove: vi.fn(async (keys: string | string[]) => {
+        const ks = Array.isArray(keys) ? keys : [keys];
+        ks.forEach((k) => delete sessionStore[k]);
+      }),
     },
   },
   runtime: {
