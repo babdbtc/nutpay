@@ -227,7 +227,20 @@ function Approval() {
       </div>
 
       {/* Buttons */}
-      <div className="flex gap-2 mt-2">
+      {!originHasAutoApprove && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs text-muted-foreground"
+          onClick={handleApproveTab}
+        >
+          Approve for this tab session
+          <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 h-5 border-muted-foreground/30">
+            Ctrl+&#x23CE;
+          </Badge>
+        </Button>
+      )}
+      <div className="flex gap-2">
         <Button
           variant="secondary"
           className="flex-1"
@@ -248,19 +261,6 @@ function Approval() {
           </Badge>
         </Button>
       </div>
-      {!originHasAutoApprove && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full text-xs text-muted-foreground"
-          onClick={handleApproveTab}
-        >
-          Approve for this tab session
-          <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 h-5 border-muted-foreground/30">
-            Ctrl+&#x23CE;
-          </Badge>
-        </Button>
-      )}
 
       {/* Timer */}
       <p className="text-center text-xs text-muted-foreground">

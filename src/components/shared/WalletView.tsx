@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import type { MintBalance, Transaction, Settings, MintConfig } from '../../shared/types';
 import { formatAmount, formatTransactionAmount, formatTime, getOriginHost } from '../../shared/format';
 import { LightningReceive } from '../../popup/components/LightningReceive';
@@ -99,10 +100,10 @@ export function WalletView({
         setTokenInput('');
         loadData();
       } else {
-        alert(result.error || 'Failed to receive token');
+        toast.error(result.error || 'Failed to receive token');
       }
     } catch {
-      alert('Failed to receive token');
+      toast.error('Failed to receive token');
     } finally {
       setReceiving(false);
     }
@@ -220,11 +221,11 @@ export function WalletView({
         <div className="flex items-center gap-1">
           {headerActions}
           {securityEnabled && (
-            <Button variant="ghost" size="icon" onClick={handleLock} className="text-muted-foreground hover:text-foreground" title="Lock wallet">
+            <Button variant="ghost" size="icon" onClick={handleLock} className="text-muted-foreground hover:text-foreground" title="Lock wallet" aria-label="Lock wallet">
               <Lock className="h-5 w-5" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" onClick={openOptions} className="text-muted-foreground hover:text-foreground" title="Settings">
+          <Button variant="ghost" size="icon" onClick={openOptions} className="text-muted-foreground hover:text-foreground" title="Settings" aria-label="Settings">
             <SettingsIcon className="h-5 w-5" />
           </Button>
         </div>

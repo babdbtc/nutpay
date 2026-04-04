@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Toaster } from 'sonner';
 import { useWalletAuth } from '../hooks/useWalletAuth';
 import { useWalletData } from '../hooks/useWalletData';
 import { usePageEcash } from '../hooks/usePageEcash';
@@ -37,6 +38,7 @@ function SidePanel() {
       onClick={handleRefresh}
       className="text-muted-foreground hover:text-foreground"
       title="Refresh"
+      aria-label="Refresh"
     >
       <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
     </Button>
@@ -56,6 +58,7 @@ function SidePanel() {
           containerClass="sidepanel-container"
           headerActions={refreshButton}
         />
+        <Toaster theme="dark" position="bottom-center" />
       </ErrorBoundary>
     );
   }
@@ -86,6 +89,7 @@ function SidePanel() {
           <SpendingDashboard displayFormat={data.settings.displayFormat} />
         </TabsContent>
       </Tabs>
+      <Toaster theme="dark" position="bottom-center" />
     </ErrorBoundary>
   );
 }
