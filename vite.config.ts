@@ -31,6 +31,19 @@ function fixExtensionStructure() {
         }
       }
 
+      // Copy fonts
+      const fontsDir = 'assets/fonts';
+      const distFontsDir = 'dist/assets/fonts';
+      if (existsSync(fontsDir)) {
+        if (!existsSync(distFontsDir)) {
+          mkdirSync(distFontsDir, { recursive: true });
+        }
+        const fontFiles = readdirSync(fontsDir);
+        for (const file of fontFiles) {
+          copyFileSync(`${fontsDir}/${file}`, `${distFontsDir}/${file}`);
+        }
+      }
+
       // Move HTML files from nested paths to root
       const htmlMoves = [
         ['dist/src/popup/index.html', 'dist/popup.html'],

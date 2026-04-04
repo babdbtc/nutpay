@@ -6,13 +6,13 @@ export const PRESET_MINTS: MintConfig[] = [
     url: 'https://mint.minibits.cash/Bitcoin',
     name: 'Minibits',
     enabled: true,
-    trusted: true,
+    trusted: false,
   },
   {
     url: 'https://mint.coinos.io',
     name: 'Coinos',
     enabled: false,
-    trusted: true,
+    trusted: false,
   },
   {
     url: 'https://mint.lnbits.com',

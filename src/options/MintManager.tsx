@@ -4,7 +4,6 @@ import { PRESET_MINTS } from '../shared/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 
 export function MintManager() {
@@ -65,11 +64,6 @@ export function MintManager() {
               </span>
             </div>
             <div className="flex items-center gap-2 ml-4">
-              {mint.trusted && (
-                <Badge className="bg-green-500/20 text-green-500 border-0">
-                  Trusted
-                </Badge>
-              )}
               <Switch
                 checked={mint.enabled}
                 onCheckedChange={(v) => toggleMint(mint.url, v)}
